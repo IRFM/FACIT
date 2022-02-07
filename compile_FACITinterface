@@ -1,0 +1,4 @@
+ifort -c constants.f90 -o constants.o
+ifort -c facit.f90 -o facit.o -llapack
+ifort -c FACIT_interface.f90 -o FACIT_interface.o
+ifort -O2 -r8 -mcmodel=large facit.o FACIT_interface.o constants.o -o FACIT_interface -llapack
