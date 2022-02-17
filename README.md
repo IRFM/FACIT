@@ -32,7 +32,7 @@ References to be cited when using FACIT :
 @article{Fajardo_PPCF2022,
 	year = 2022,
 	publisher = {{IOP} Publishing},
-	author = {Daniel Farajo and Clemente Angioni and Patrick Maget and Pierre Manas},
+	author = {Daniel Fajardo and Clemente Angioni and Patrick Maget and Pierre Manas},
 	title = {Analytical model for collisional impurity transport in tokamaks at arbitrary collisionality},
 	journal = {submitted to Plasma Physics and Controlled Fusion},
 	abstract = {The physics governing the collisional transport of impurities in tokamak plasmas can change significantly depending on four main parameters, namely the collisionality, the impurity charge and mass, and the trapped particle fraction, which can vary widely from the core to the edge of a fusion device. We present an analytical model for collisional impurity transport with a consistent dependence on broad scans in these four parameters, showing good agreement with the driftkinetic code NEO. Radial profiles of collisional fluxes are calculated for different impurity species using ASDEX Upgrade experimental profiles as well as ITER simulated profiles, and they are also compared to NEO. This model is suited for fast integrated modelling applications due to its low computational cost.}
