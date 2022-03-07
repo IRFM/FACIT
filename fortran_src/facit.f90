@@ -1,5 +1,5 @@
 ! Software name : FACIT
-! Authors : P. Maget, C. Angioni, D. Fajardo, P. Manas
+! Authors : P. Maget and D. Fajardo, C. Angioni, P. Manas
 ! Copyright holders : Commissariat à l’Energie Atomique et aux Energies Alternatives (CEA), France, Max-Planck Institut für Plasmaphysik, Germany
 ! CEA and IPP authorize the use of the FACIT software under the CeCILL-C open source license https://cecill.info/licences/Licence_CeCILL-C_V1-en.html  
 ! The terms and conditions of the CeCILL-C license are deemed to be accepted upon downloading the software and/or exercising any of the rights granted under the CeCILL-C license.
