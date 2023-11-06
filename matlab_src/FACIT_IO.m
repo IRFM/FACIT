@@ -1,13 +1,12 @@
-% Collisional impurity flux
+% FACIT interface with matlab
 % --------------------------------------------------------------------------------
-% out = FACIT_fortran_IO(in)
+% out = FACIT_IO(in)
 % Inputs
 %
 
-function out = FACIT_IO_test(in);
+function out = FACIT_IO(in);
 
-%FDIR = '/Home/PM156629/Public/ImpurModel/FortranVersion/';
-FDIR = '';
+FDIR = '~/facit/fortran_src';
 
 Ai = in.Ai;
 Zi = in.Zi;
@@ -131,8 +130,12 @@ if ionregime == 1
 
  eval(['save facit_input.dat VV -ASCII'])
 
- %disp(['Call ',FDIR,'FACIT_interface'])
- eval(['! ./FACIT_interface '])
+ %Check FACIT interface is present in current directory
+filename = ['FACIT_interface'];
+if exist(filename, 'file') ~= 2
+	eval(['!cp ',FDIR,'/FACIT_interface .'])
+end
+eval(['! ./FACIT_interface '])
 
  %disp(['Read facit_output file'])
  eval(['load facit_output.dat -ASCII'])
