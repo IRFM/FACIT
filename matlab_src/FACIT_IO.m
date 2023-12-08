@@ -132,7 +132,8 @@ if ionregime == 1
 
  %Check FACIT interface is present in current directory
 filename = ['FACIT_interface'];
-if exist(filename, 'file') ~= 2
+%if exist(filename, 'file') ~= 2
+if isfile(filename) ~= 1
 	eval(['!cp ',FDIR,'/FACIT_interface .'])
 end
 eval(['! ./FACIT_interface '])
