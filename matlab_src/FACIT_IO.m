@@ -130,13 +130,18 @@ if ionregime == 1
 
  eval(['save facit_input.dat VV -ASCII'])
 
- %Check FACIT interface is present in current directory
-filename = ['FACIT_interface'];
-%if exist(filename, 'file') ~= 2
-if isfile(filename) ~= 1
-	eval(['!cp ',FDIR,'/FACIT_interface .'])
+%Check FACIT interface is present in current directory
+currentpath = pwd;
+filename = [pwd '/FACIT_interface'];
+if exist(filename, 'file') ~= 2
+                eval(['!cp ',FDIR,'/FACIT_interface .'])
 end
-eval(['! ./FACIT_interface '])
+
+%disp(['==============        RUNS FACIT               =================='])
+% Probably overkill in terms of loaded modules
+%[sout,tout] = unix(sprintf(['module purge \n module load intel/2019;module load mpi/2019;module load fftw/3.3.10-intel-2019;module load hdf5/1.12.0.par-intel-2019 \n ./FACIT_interface']));
+[sout,tout] = unix(sprintf([' ./FACIT_interface']));
+%disp('==============        END OF FACIT RUN        ==================')
 
  %disp(['Read facit_output file'])
  eval(['load facit_output.dat -ASCII'])
