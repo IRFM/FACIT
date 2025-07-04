@@ -27,6 +27,8 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
 ! *              3. Use of a metric qmag_metrics consistent with full equilibrium when dpsidx available
 ! * 2022/01/21 : 1. correction of Cgeo_G for full_geom=.t. (line 288)
 ! *              2. correction of GGG for full_geom=.t. (line 778)
+!* 2025/07/04 : 1. qmag input is the good quantity, compute dpsidx from it when not given in input
+!*                          2. Correct mu_ie expression to be as in D. Fajardo's paper
 !*******************************************************************************
 ! INPUTS:
 ! -----------> description [unit] {variable type, shape}
@@ -120,9 +122,6 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
   real(rkind), dimension(nx) :: K11a, K12a, K22a, K11i, K12i, K22i
   real(rkind), dimension(nx) :: Vra_BP, Vra_PS, Vra_CL
   real(rkind), dimension(nx) :: Ka, Ha
-  real(rkind), dimension(nx) :: qmag_metrics
-
-
 
   ! External procedures defined in LAPACK
   external DGETRF
@@ -139,11 +138,8 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
   eps2  = (epsk + 1.0e-33)**2
   amin  = invaspct*R0 ! minor radius
 
-  if (maxval(abs(dpsidx)).gt.1.0e-33_rkind) then
-	qmag_metrics = amin**2*B0*xn/dpsidx
-  !	print *, 'use qmag_metrics in fortran'
-  else
-	qmag_metrics = qmag
+  if (maxval(abs(dpsidx)).lt.1.0e-33_rkind) then
+	dpsidx = amin**2*B0*xn/qmag
   endif
 
   Zeff = (Za**2*Na + Zi**2*Ni)/(Ne) ! effective charge
@@ -230,7 +226,7 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
   call facs(nx, Za, ft, f1, f2, f3, y1, y2, y3, y4, adps)
 
   g = nuistar*eps15 ! collisionality parameter
-  mu_ie = 1.536*sqrt(me/mi)*(Ti15/Te15) ! ion-electron heat exchange term (Fülöp-Helander PoP '01)
+  mu_ie = (96.0*sqrt2/125.0)*(1/Zi**2)*sqrt(me/mi)*(Ti15/Te15) ! ion-electron heat exchange term (Fülöp-Helander PoP '01)
   alpha = Na*Za**2/(Ni*Zi**2) ! impurity strength parameter
 
   do i = 1, nx
@@ -313,7 +309,7 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
       dNH = AsymN(:,1)
       dNV = AsymN(:,2)
 
-      call asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag_metrics, nuswca, deltaM, Ai, Aa, Zi, Za, &
+      call asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai, Aa, Zi, Za, &
                         dNH, dNV, dminphia, dmajphia, dmin, dmaj)
 
       do i = 1, nx
@@ -360,7 +356,8 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
   ! Pfirsch-Schlüter flux
 
   !Da_PS   = adps*ma*L11impi*FV**2*q_e*Ti*Cgeo_G*amin**2/(Za**2*q_e**2*B2avg*(dpsidx**2 + 1.e-33))
-  Da_PS   = adps*qmag_metrics**2*rhoLimp2*L11impi*(Cgeo_G/(2.0*eps2))
+  Da_PS   = adps*qmag**2*rhoLimp2*L11impi*(Cgeo_G/(2.0*eps2))
+  !Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
   Ka_PS   = (Za/Zi)*Da_PS
   Ha_PS   = -((1.0 + (Za/Zi)*(C0a - 1.0)) + (Cgeo_U/Cgeo_G)*(Za/Zi)*(C0a + ki))*Da_PS
 
@@ -370,7 +367,7 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
 
   ! Classical flux
 
-  Da_CL   = (2.0*eps2*Cgeo_Gcl/Cgeo_G)*Da_PS/(2*qmag_metrics**2)
+  Da_CL   = (2.0*eps2*Cgeo_Gcl/Cgeo_G)*Da_PS/(2*qmag**2)
   Ka_CL   = (Za/Zi)*Da_CL
   Ha_CL   = -(1.0 + (Za/Zi)*(C0a - 1.0))*Da_CL
 
@@ -988,7 +985,7 @@ subroutine facs(nx, Zimp, ft, f1, f2, f3, y1, y2, y3, y4, adps)
   y3 = 8.85/Zimp**2.98 - 7.96/Zimp**1.82 - 9.27/Zimp**1.98 + 8.34/Zimp**0.82
 
 !  adps = (-110378.3491 + 753838.926571*Zimp**1.06107833841)/(1+ 1007273.22737*Zimp)
-  adps = -0.109/Zimp + 0.743*Zimp)**0.06
+  adps = -0.109/Zimp + 0.743*Zimp**0.06
 
 
 end subroutine facs
