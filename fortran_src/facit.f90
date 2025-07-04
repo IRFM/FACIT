@@ -81,7 +81,7 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
 ! Va_* ------> Pfirsch-Schlüter, Banana-Plateau and classical components of
 !              the pinch velocity [m/s] {arr, nx}!*******************************************************************************
 
-  use constants, only: rkind, mp, me, q_e, eps_pi_fac
+  use constants, only: rkind, mp, me, q_e, eps_pi_fac, sqrt2
   implicit none
 
   !------------------------------ declarations --------------------------------
