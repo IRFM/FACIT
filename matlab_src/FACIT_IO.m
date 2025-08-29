@@ -134,7 +134,7 @@ if ionregime == 1
 currentpath = pwd;
 filename = [pwd '/FACIT_interface'];
 if exist(filename, 'file') ~= 2
-                eval(['!cp ',FDIR,'/FACIT_interface .'])
+	eval(['!cp ',FDIR,'/FACIT_interface .'])
 end
 
 %disp(['==============        RUNS FACIT               =================='])
