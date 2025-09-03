@@ -384,6 +384,7 @@ for za in range(len(ind_impurities)):
 	cmd = './FACIT_interface'
 	os.system(cmd)
 
+	np.loadtxt('facit_output.dat', delimiter='  ')
 
 
 
