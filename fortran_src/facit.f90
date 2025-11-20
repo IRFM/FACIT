@@ -94,7 +94,8 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
   real(rkind), dimension(nx)  :: qmag, xn, dpsidx, FV, Za
   real(rkind), dimension(nx,nis)  :: Machi
   real(rkind) :: B0, R0, invaspct, Aa
-  real(rkind), dimension(nis)  :: Ai, Zi
+  real(rkind), dimension(nis)  :: Ai
+  real(rkind), dimension(nx,nis)  :: Zi
   real(rkind), dimension(nx,nth) :: jacob, BV, RV, PhiV, NV
   real(rkind), dimension(nx,2) :: AsymPhi, AsymN
   real(rkind), dimension(4) :: regulopt
@@ -156,12 +157,12 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
 	dpsidx = amin**2*B0*xn/qmag
   endif
 
-  Zeff = (Za**2*Na + Zi**2*Ni)/(Ne) ! effective charge
+  Zeff = (Za**2*Na + Zi**2*Ni)/(Ne) ! effective charge, change to a do
 
   do i = 1, nx
     ! logarithmic gradients
-    grad_ln_ni(i) = gradNi(i)/(Ni(i) + 1.e-33)
-    grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33)
+    grad_ln_ni(i) = gradNi(i)/(Ni(i) + 1.e-33) !add do
+    grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33) !add do
     grad_ln_na(i) = gradNa(i)/(Na(i) + 1.e-33)
     grad_ln_Ta(i) = gradTa(i)/(Ta(i) + 1.e-33)
     ! trapped particle fraction
@@ -170,10 +171,10 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
 
 
   if (.not.rotation) then
-    Machi = 0.0_rkind
+    Machi = 0.0_rkind !add I mat
   endif
 
-  deltaM = 2*(Aa/Ai)*Machi**2*epsk ! rotation strength parameter
+  deltaM = 2*(Aa/Ai)*Machi**2*epsk ! rotation strength parameter, do
 
 
   ! Coulomb Logarithms (from NRL formulary)
