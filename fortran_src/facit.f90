@@ -4,7 +4,7 @@
 ! CEA and IPP authorize the use of the FACIT software under the CeCILL-C open source license https://cecill.info/licences/Licence_CeCILL-C_V1-en.html  
 ! The terms and conditions of the CeCILL-C license are deemed to be accepted upon downloading the software and/or exercising any of the rights granted under the CeCILL-C license.
 ! 
-subroutine FACIT(nx, nth, xn, theta, &                                ! grid parameters
+subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid parameters
                  Za, Aa, Zi, Ai, &                                    ! impurity and main ion charge and mass
                  Te, Ti, Ne, Ni, Na, Machi, &                         ! plasma profiles
                  gradTi, gradNi, gradNa, &                            ! gradients
@@ -87,11 +87,14 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
   !------------------------------ declarations --------------------------------
 
   ! INPUTS
-  integer :: nx, nth
+  integer :: nx, nth, nis
   real(rkind), dimension(nth) :: theta
-  real(rkind), dimension(nx)  :: Te, Ti, Ne, Ni, Na, gradTi, gradNi, gradNa
-  real(rkind), dimension(nx)  :: qmag, xn, dpsidx, FV, Za, Machi
-  real(rkind) :: B0, R0, invaspct, Ai, Aa, Zi
+  real(rkind), dimension(nx)  :: Te, Ne, gradNa, Ta, gradTa
+  real(rkind), dimension(nx,nis)  :: Ti, Ni, gradTi, gradNi
+  real(rkind), dimension(nx)  :: qmag, xn, dpsidx, FV, Za
+  real(rkind), dimension(nx,nis)  :: Machi
+  real(rkind) :: B0, R0, invaspct, Aa
+  real(rkind), dimension(nis)  :: Ai, Zi
   real(rkind), dimension(nx,nth) :: jacob, BV, RV, PhiV, NV
   real(rkind), dimension(nx,2) :: AsymPhi, AsymN
   real(rkind), dimension(4) :: regulopt
@@ -100,28 +103,39 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
   ! OUTPUTS
   real(rkind), dimension(nx) :: Flux_imp, Da, Vconv, dmin, dmaj
   real(rkind), dimension(nx, nth) :: nn
-  real(rkind), dimension(nx) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CL, Ha_BP, Ha_PS, Ha_CL, Va_BP, Va_PS, Va_CL
+  real(rkind), dimension(nx,nis) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CL, Ha_BP, Ha_PS, Ha_CL, Va_BP, Va_PS, Va_CL
+  real(rkind), dimension(nx) :: Da_BPs, Da_PSs, Da_CLs, Ka_BPs, Ka_PSs, Ka_CLs, Ha_BPs, Ha_PSs, Ha_CLs, Va_BPs, Va_PSs, Va_CLs
 
   ! OTHER
   integer :: i, p, n, it, ix!, info, ierr, ierrmax
-  real(rkind) :: amin, mi, ma, ftrap, ki_Redl, C2
-  real(rkind), dimension(nx) :: grad_ln_ni, grad_ln_Ti, grad_ln_na, Ti15, Te15
-  real(rkind), dimension(nx) :: epsk, eps15, eps2, ft, C0a, wca, deltaM, ki, g, dD2
+  real(rkind) :: amin, ma, ftrap, ki_Redl, C2
+  real(rkind), dimension(nis)  :: mi
+  real(rkind), dimension(nx) ::  grad_ln_na, Te15, Ta15
+  real(rkind), dimension(nx,nis)  :: grad_ln_ni, grad_ln_Ti, grad_ln_Ta, Ti15
+  real(rkind), dimension(nx) :: epsk, eps15, eps2, ft, wca, dD2
+  real(rkind), dimension(nx,nis) :: deltaM,ki, C0a, g  
   real(rkind), dimension(nx) :: f1, f2, f3, y1, y2, y3, y4, adps
-  real(rkind), dimension(nx) :: LneeNRL, LneiNRL, LneimpNRL
-  real(rkind), dimension(nx) :: LniiNRL, LniimpNRL, LnimpeNRL, LnimpimpNRL
-  real(rkind), dimension(nx) :: Tauee, Tauei, Taueimp
-  real(rkind), dimension(nx) :: Tauie, Tauii, Tauiimp
-  real(rkind), dimension(nx) :: Tauimpe, Tauimpi, Tauimpimp
-  real(rkind), dimension(nx) :: wee, wii, wimpimp, nuestar, nuistar, nuimpstar, rhoLimp2
-  real(rkind), dimension(nx) :: L11impi, nuswca, mu_ie, alpha, Zeff
-  real(rkind), dimension(nx) :: UU, GG, B2avg, dNH, dNV, dminphia, dmajphia
+  real(rkind), dimension(nx) :: LneeNRL, LneimpNRL
+  real(rkind), dimension(nx,nis) :: LneiNRL
+  real(rkind), dimension(nx) :: LnimpeNRL, LnimpimpNRL
+  real(rkind), dimension(nx,nis) :: LniiNRL, LniimpNRL
+  real(rkind), dimension(nx) :: Tauee, Taueimp
+  real(rkind), dimension(nx,nis) :: Tauei
+  real(rkind), dimension(nx,nis) :: Tauie, Tauii, Tauiimp
+  real(rkind), dimension(nx) :: Tauimpe, Tauimpimp
+  real(rkind), dimension(nx,nis) :: Tauimpi
+  real(rkind), dimension(nx) :: wee, wimpimp, nuestar, nuimpstar, rhoLimp2
+  real(rkind), dimension(nx,nis) :: wii, nuistar
+  real(rkind), dimension(nx, nis) :: L11impi, nuswca, mu_ie, alpha, Zeff
+  real(rkind), dimension(nx) ::  B2avg, dNH, dNV, dminphia, dmajphia
+  real(rkind), dimension(nx,nis) :: UU, GG
   real(rkind), dimension(nx) :: Cgeo_G, Cgeo_U, Cgeo_Gcl
   real(rkind), dimension(nx, nth) :: b2
   real(rkind), dimension(nx) :: b2navg, nb2avg, nNVavg, b2NVavg
-  real(rkind), dimension(nx) :: K11a, K12a, K22a, K11i, K12i, K22i
-  real(rkind), dimension(nx) :: Vra_BP, Vra_PS, Vra_CL
-  real(rkind), dimension(nx) :: Ka, Ha
+  real(rkind), dimension(nx) :: K11a, K12a, K22a
+  real(rkind), dimension(nx,nis) :: K11i, K12i, K22i
+  real(rkind), dimension(nx,nis) :: Vra_BP, Vra_PS, Vra_CL
+  real(rkind), dimension(nx,nis) :: Ka, Ha
 
   ! External procedures defined in LAPACK
   external DGETRF
@@ -149,6 +163,7 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
     grad_ln_ni(i) = gradNi(i)/(Ni(i) + 1.e-33)
     grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33)
     grad_ln_na(i) = gradNa(i)/(Na(i) + 1.e-33)
+    grad_ln_Ta(i) = gradTa(i)/(Ta(i) + 1.e-33)
     ! trapped particle fraction
     ft(i) = ftrap(epsk(i))
   enddo
@@ -174,36 +189,37 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
      LneiNRL(p) = 30 - log(Zi**2/Ai*(Ni(p)/1e6)**0.5) + 1.5*log(Ti(p))
    endif
 
-   if ((Ti(p)*me/(Aa*mp)<Te(p)).and.(Te(p)<10*Za(p)**2)) then
+   if ((Ta(p)*me/(Aa*mp)<Te(p)).and.(Te(p)<10*Za(p)**2)) then
      LneimpNRL(p) = 23. - log(Za(p)*(Ne(p)/1e6)**0.5) + 1.5*log(Te(p))
-   elseif ((Ti(p)*me/(Aa*mp)<10.*Za(p)**2).and.(Te(p)>10.*Za(p)**2)) then
+   elseif ((Ta(p)*me/(Aa*mp)<10.*Za(p)**2).and.(Te(p)>10.*Za(p)**2)) then
      LneimpNRL(p) = 24. - 0.5*log(Ne(p)/1e6) + log(Te(p))
    else
-     LneimpNRL(p) = 30. - log(Za(p)**2/Aa*(Na(p)/1e6)**0.5) + 1.5*log(Ti(p))
+     LneimpNRL(p) = 30. - log(Za(p)**2/Aa*(Na(p)/1e6)**0.5) + 1.5*log(Ta(p))
    endif
 
   enddo
 
   LniiNRL     = 23. - log(Zi*Zi*sqrt(2*(Ni/1e6)*Zi**2)) + 1.5*log(Ti)
-  LniimpNRL   = 23. - log(Zi*Za*sqrt((Ni/1e6)*Zi**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
-  LnimpimpNRL = 23. - log(Za*Za*sqrt((Na/1e6)*Za**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
+  LniimpNRL   = 23. - log((Zi*Za/(Ta + Ti))*sqrt((Ni/(1e6*Ti))*Zi**2+(Na/(1e6*Ta))*Za**2))  !check
+  LnimpimpNRL = 23. - log(Za*Za*sqrt((Na/1e6)*Za**2+(Na/1e6)*Za**2)) + 1.5*log(Ta)
 
 
   ! Collision times (Braginskii)
   Ti15 = Ti**1.5
+  Ta15 = Ta**1.5
   Te15 = Te**1.5
 
   Tauee     = (eps_pi_fac*sqrt(me)*Te15)/(Ne*LneeNRL)
   Tauei     = (eps_pi_fac*sqrt(me)*Te15)/(Zi**2*Ni*LneiNRL)
-  Taueimp   = (eps_pi_fac*sqrt(me)*Te15)/(Zi**2*Za**2*Na*LneimpNRL)
+  Taueimp   = (eps_pi_fac*sqrt(me)*Te15)/(Zi**2*Za**2*Na*LneimpNRL) !Why Zi
 
   Tauie     = (eps_pi_fac*sqrt(mi)*Ti15)/(Zi**2*Ne*LneiNRL)
   Tauii     = (eps_pi_fac*sqrt(mi)*Ti15)/(Zi**4*Ni*LniiNRL)
   Tauiimp   = (eps_pi_fac*sqrt(mi)*Ti15)/(Zi**2*Za**2*Na*LniimpNRL)
 
-  Tauimpe   = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**2*Ne*LneimpNRL)
-  Tauimpi   = (eps_pi_fac*sqrt(ma)*Ti15)/(Zi**2*Za**2*Ni*LniimpNRL)
-  Tauimpimp = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**4*Na*LnimpimpNRL)
+  Tauimpe   = (eps_pi_fac*sqrt(ma)*Ta15)/(Za**2*Ne*LneimpNRL)
+  Tauimpi   = (eps_pi_fac*sqrt(ma)*Ta15)/(Zi**2*Za**2*Ni*LniimpNRL)
+  Tauimpimp = (eps_pi_fac*sqrt(ma)*Ta15)/(Za**4*Na*LnimpimpNRL)
 
 
   ! impurity collision frequency
@@ -212,7 +228,7 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
   ! transit frequencies
   wee     = (2.0*q_e*Te/me)**0.5/(R0*qmag)
   wii     = (2.0*q_e*Ti/mi)**0.5/(R0*qmag)
-  wimpimp = (2.0*q_e*Ti/ma)**0.5/(R0*qmag)
+  wimpimp = (2.0*q_e*Ta/ma)**0.5/(R0*qmag)
 
   ! collisionalities
   nuestar   = 1.0/((eps15 + 1.e-33)*wee*Tauee)
@@ -234,7 +250,7 @@ subroutine FACIT(nx, nth, xn, theta, &                                ! grid par
     ki(i)  = ki_Redl(nuistar(i), ft(i), Zeff(i)) ! neoclassical ion flow coefficient
   enddo
 
-  rhoLimp2 = (2.0*q_e*Ti/ma)/wca**2 ! Impurity Larmor radius (squared)
+  rhoLimp2 = (2.0*q_e*Ta/ma)/wca**2 ! Impurity Larmor radius (squared)
 
   ! thermodynamic gradients (for asymmetry calculations)
   UU  = -(Za/Zi)*(C0a + ki)*grad_ln_Ti
@@ -1070,7 +1086,7 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
 
   ! Plateau regime
 
-  fac_a_P = nimp*(q_e*Ti)*SQRT(pi)/(3.0*wimpimp)
+  fac_a_P = nimp*(q_e*Ta)*SQRT(pi)/(3.0*wimpimp)
   fac_i_P = ni*(q_e*Ti)*SQRT(pi)/(3.0*wii)
 
   K11aP = fac_a_P*2.0
