@@ -35,20 +35,21 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
 ! ------------
 ! nx --------> size of radial arrays [-] {int}
 ! nth -------> size of poloidal arrays [-] {int}
+!nis --------> number of ion species [-] {int}
 ! xn --------> radial coordinate [-] {arr, nx}
 ! theta -----> poloidal coordinate [-] {arr, nth}
 ! Za --------> impurity charge number [-] {arr, nx}
 ! Aa --------> impurity mass number [-] {float}
-! Zi --------> main ion charge number [-] {float}
-! Ai --------> main ion mass number [-] {float}
+! Zi --------> main ion charge number [-] {array, (nx, nis)}
+! Ai --------> main ion mass number [-] {array, nis}
 ! Te --------> electron temperature [eV] {arr, nx}
 ! Ti --------> main ion temperature [eV] {arr, nx}
 ! Ne --------> electron density [1/m^3] {arr, nx}
-! Ni --------> main ion denisty [1/m^3] {arr, nx}
+! Ni --------> main ion denisty [1/m^3] {arr, (nx,nis)}
 ! Na --------> impurity density [1/m^3] {arr, nx}
-! Machi -----> Mach number of main ion [-] {arr, nx}
+! Machi -----> Mach number of main ion [-] {arr, nx} check
 ! gradTi ----> main ion temperature gradient [eV/-] {arr, nx}
-! gradNi ----> main ion density gradient [1/m^3/-] {arr, nx}
+! gradNi ----> main ion density gradient [1/m^3/-] {arr, (nx,nis)}
 ! gradNa ----> impurity density gradient [1/m^3/-] {arr, nx}
 ! invaspct --> inverse aspect ratio [-] {float}
 ! B0 --------> magnetic field at magnetic axis [T] {float}
@@ -89,10 +90,10 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
   ! INPUTS
   integer :: nx, nth, nis
   real(rkind), dimension(nth) :: theta
-  real(rkind), dimension(nx)  :: Te, Ne, gradNa, Ta, gradTa
-  real(rkind), dimension(nx,nis)  :: Ti, Ni, gradTi, gradNi
+  real(rkind), dimension(nx)  :: Te, Ti, gradTi, Ne, gradNa
+  real(rkind), dimension(nx,nis)  :: Ni, gradNi
   real(rkind), dimension(nx)  :: qmag, xn, dpsidx, FV, Za
-  real(rkind), dimension(nx,nis)  :: Machi
+  real(rkind), dimension(nx)  :: Machi !check
   real(rkind) :: B0, R0, invaspct, Aa
   real(rkind), dimension(nis)  :: Ai
   real(rkind), dimension(nx,nis)  :: Zi
@@ -102,19 +103,20 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
   logical :: pol_asym, full_geom, rotation
 
   ! OUTPUTS
-  real(rkind), dimension(nx) :: Flux_imp, Da, Vconv, dmin, dmaj
+  real(rkind), dimension(nx,nis) :: Da, Vconv, Flux_imp, dmin, dmaj
+  real(rkind), dimension(nx) ::  Das, dmins, dmajs
   real(rkind), dimension(nx, nth) :: nn
   real(rkind), dimension(nx,nis) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CL, Ha_BP, Ha_PS, Ha_CL, Va_BP, Va_PS, Va_CL
   real(rkind), dimension(nx) :: Da_BPs, Da_PSs, Da_CLs, Ka_BPs, Ka_PSs, Ka_CLs, Ha_BPs, Ha_PSs, Ha_CLs, Va_BPs, Va_PSs, Va_CLs
 
   ! OTHER
-  integer :: i, p, n, it, ix!, info, ierr, ierrmax
+  integer :: i,j, p, n, it, ix!, info, ierr, ierrmax
   real(rkind) :: amin, ma, ftrap, ki_Redl, C2
   real(rkind), dimension(nis)  :: mi
-  real(rkind), dimension(nx) ::  grad_ln_na, Te15, Ta15
-  real(rkind), dimension(nx,nis)  :: grad_ln_ni, grad_ln_Ti, grad_ln_Ta, Ti15
+  real(rkind), dimension(nx) ::  grad_ln_na, Te15, Ti15, grad_ln_Ti
+  real(rkind), dimension(nx,nis)  :: grad_ln_ni
   real(rkind), dimension(nx) :: epsk, eps15, eps2, ft, wca, dD2
-  real(rkind), dimension(nx,nis) :: deltaM,ki, C0a, g  
+  real(rkind), dimension(nx,nis) :: deltaM,ki, C0a, g  !check deltaM
   real(rkind), dimension(nx) :: f1, f2, f3, y1, y2, y3, y4, adps
   real(rkind), dimension(nx) :: LneeNRL, LneimpNRL
   real(rkind), dimension(nx,nis) :: LneiNRL
@@ -130,6 +132,7 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
   real(rkind), dimension(nx, nis) :: L11impi, nuswca, mu_ie, alpha, Zeff
   real(rkind), dimension(nx) ::  B2avg, dNH, dNV, dminphia, dmajphia
   real(rkind), dimension(nx,nis) :: UU, GG
+  real(rkind), dimension(nx) :: UUeff, GGeff
   real(rkind), dimension(nx) :: Cgeo_G, Cgeo_U, Cgeo_Gcl
   real(rkind), dimension(nx, nth) :: b2
   real(rkind), dimension(nx) :: b2navg, nb2avg, nNVavg, b2NVavg
@@ -157,107 +160,136 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
 	dpsidx = amin**2*B0*xn/qmag
   endif
 
-  Zeff = (Za**2*Na + Zi**2*Ni)/(Ne) ! effective charge, change to a do
+do j = 1,nis
+  Zeff(:,j) = (Za**2*Na + Zi(j)**2*Ni(:,j))/(Ne)
+enddo
 
-  do i = 1, nx
-    ! logarithmic gradients
-    grad_ln_ni(i) = gradNi(i)/(Ni(i) + 1.e-33) !add do
-    grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33) !add do
+  do i = 1, nx 
     grad_ln_na(i) = gradNa(i)/(Na(i) + 1.e-33)
-    grad_ln_Ta(i) = gradTa(i)/(Ta(i) + 1.e-33)
+    grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33)
     ! trapped particle fraction
     ft(i) = ftrap(epsk(i))
+    do j = 1, nis
+    ! logarithmic gradients
+      grad_ln_ni(i,j) = gradNi(i,j)/(Ni(i,j) + 1.e-33)
+    enddo  
   enddo
 
 
   if (.not.rotation) then
-    Machi = 0.0_rkind !add I mat
+    Machi = 0.0_rkind  !check with Patrick
   endif
 
-  deltaM = 2*(Aa/Ai)*Machi**2*epsk ! rotation strength parameter, do
+  deltaM = 2*(Aa/Ai)*Machi**2*epsk ! rotation strength parameter
 
 
   ! Coulomb Logarithms (from NRL formulary)
   LneeNRL = 23.5 - 0.5*log(Ne/1e6) + 1.25*log(Te) - sqrt(1e-5 + (1.0/16.0)*(log(Te) - 2)**2)
 
   do p = 1, nx
+    do j = 1, nis
+      if ((Ti(p)*me/(mi(j))<Te(p)).and.(Te(p)<10*Zi(p)**2)) then
+        LneiNRL(p,j) = 23 - 0.5*log(Zi**2*Ne(p)/1e6) + 1.5*log(Te(p))
+      elseif ((Ti(p)*me/(mi(j))<10*Zi**2).and.(Te(p)>10*Zi(p)**2)) then
+        LneiNRL(p,j) = 24 - 0.5*log(Ne(p)/1e6) + log(Te(p))
+      else
+        LneiNRL(p,j) = 30 - log(Zi(p)**2/Ai(p)*(Ni(p,j)/1e6)**0.5) + 1.5*log(Ti(p))
+      endif
+    enddo 
 
-   if ((Ti(p)*me/(mi)<Te(p)).and.(Te(p)<10*Zi**2)) then
-     LneiNRL(p) = 23 - 0.5*log(Zi**2*Ne(p)/1e6) + 1.5*log(Te(p))
-   elseif ((Ti(p)*me/(mi)<10*Zi**2).and.(Te(p)>10*Zi**2)) then
-     LneiNRL(p) = 24 - 0.5*log(Ne(p)/1e6) + log(Te(p))
-   else
-     LneiNRL(p) = 30 - log(Zi**2/Ai*(Ni(p)/1e6)**0.5) + 1.5*log(Ti(p))
-   endif
-
-   if ((Ta(p)*me/(Aa*mp)<Te(p)).and.(Te(p)<10*Za(p)**2)) then
-     LneimpNRL(p) = 23. - log(Za(p)*(Ne(p)/1e6)**0.5) + 1.5*log(Te(p))
-   elseif ((Ta(p)*me/(Aa*mp)<10.*Za(p)**2).and.(Te(p)>10.*Za(p)**2)) then
-     LneimpNRL(p) = 24. - 0.5*log(Ne(p)/1e6) + log(Te(p))
-   else
-     LneimpNRL(p) = 30. - log(Za(p)**2/Aa*(Na(p)/1e6)**0.5) + 1.5*log(Ta(p))
-   endif
+    if ((Ti(p)*me/(Aa*mp)<Te(p)).and.(Te(p)<10*Za(p)**2)) then
+      LneimpNRL(p) = 23. - log(Za(p)*(Ne(p)/1e6)**0.5) + 1.5*log(Te(p))
+    elseif ((Ti(p)*me/(Aa*mp)<10.*Za(p)**2).and.(Te(p)>10.*Za(p)**2)) then
+      LneimpNRL(p) = 24. - 0.5*log(Ne(p)/1e6) + log(Te(p))
+    else
+      LneimpNRL(p) = 30. - log(Za(p)**2/Aa*(Na(p)/1e6)**0.5) + 1.5*log(Ti(p))
+    endif
 
   enddo
 
-  LniiNRL     = 23. - log(Zi*Zi*sqrt(2*(Ni/1e6)*Zi**2)) + 1.5*log(Ti)
-  LniimpNRL   = 23. - log((Zi*Za/(Ta + Ti))*sqrt((Ni/(1e6*Ti))*Zi**2+(Na/(1e6*Ta))*Za**2))  !check
-  LnimpimpNRL = 23. - log(Za*Za*sqrt((Na/1e6)*Za**2+(Na/1e6)*Za**2)) + 1.5*log(Ta)
+  do j = 1,nis
+    LniiNRL(:,j)     = 23. - log(Zi(j)*Zi(j)*sqrt(2*(Ni(:,j)/1e6)*Zi(j)**2)) + 1.5*log(Ti)
+    LniimpNRL(;,j)   = 23. - log(Zi(j)*Za*sqrt((Ni(:,j)/1e6)*Zi(j)**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
+  enddo 
+  LnimpimpNRL = 23. - log(Za*Za*sqrt((Na/1e6)*Za**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
 
 
   ! Collision times (Braginskii)
   Ti15 = Ti**1.5
-  Ta15 = Ta**1.5
   Te15 = Te**1.5
 
   Tauee     = (eps_pi_fac*sqrt(me)*Te15)/(Ne*LneeNRL)
-  Tauei     = (eps_pi_fac*sqrt(me)*Te15)/(Zi**2*Ni*LneiNRL)
+  do j=1,nis
+    Tauei(:,j)     = (eps_pi_fac*sqrt(me)*Te15)/(Zi**2*Ni(:,j)*LneiNRL(:,j))
+  enddo
   Taueimp   = (eps_pi_fac*sqrt(me)*Te15)/(Zi**2*Za**2*Na*LneimpNRL) !Why Zi
 
-  Tauie     = (eps_pi_fac*sqrt(mi)*Ti15)/(Zi**2*Ne*LneiNRL)
-  Tauii     = (eps_pi_fac*sqrt(mi)*Ti15)/(Zi**4*Ni*LniiNRL)
-  Tauiimp   = (eps_pi_fac*sqrt(mi)*Ti15)/(Zi**2*Za**2*Na*LniimpNRL)
+  do j =1,nis
+    Tauie(:,j)     = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(j)**2*Ne*LneiNRL(:,j))
+    Tauii(:,j)     = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(j)**4*Ni(:,j)*LniiNRL(:,j))
+    Tauiimp(:,j)   = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(j)**2*Za**2*Na*LniimpNRL(:,j))
+  enddo
 
-  Tauimpe   = (eps_pi_fac*sqrt(ma)*Ta15)/(Za**2*Ne*LneimpNRL)
-  Tauimpi   = (eps_pi_fac*sqrt(ma)*Ta15)/(Zi**2*Za**2*Ni*LniimpNRL)
-  Tauimpimp = (eps_pi_fac*sqrt(ma)*Ta15)/(Za**4*Na*LnimpimpNRL)
+  Tauimpe   = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**2*Ne*LneimpNRL)
+  do j =1, nis
+    Tauimpi(:,j)   = (eps_pi_fac*sqrt(ma)*Ti15)/(Zi(j)**2*Za**2*Ni(:,j)*LniimpNRL(:,j))
+  enddo
+  Tauimpimp = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**4*Na*LnimpimpNRL)
 
 
   ! impurity collision frequency
-  L11impi = 1.0/(sqrt(1.0 + Aa/Ai)*Tauimpi)
+  do j = 1,nis
+    L11impi(j) = 1.0/(sqrt(1.0 + Aa/Ai(j))*Tauimpi(:,j))
+  enddo
 
   ! transit frequencies
   wee     = (2.0*q_e*Te/me)**0.5/(R0*qmag)
-  wii     = (2.0*q_e*Ti/mi)**0.5/(R0*qmag)
-  wimpimp = (2.0*q_e*Ta/ma)**0.5/(R0*qmag)
+  do j = 1,nis
+    wii(:,j)     = (2.0*q_e*Ti/mi(j))**0.5/(R0*qmag)
+  enddo
+  wimpimp = (2.0*q_e*Ti/ma)**0.5/(R0*qmag)
 
   ! collisionalities
   nuestar   = 1.0/((eps15 + 1.e-33)*wee*Tauee)
-  nuistar   = 1.0/((eps15 + 1.e-33)*wii*Tauii)
+  do j = 1,nis
+    nuistar(:,j)   = 1.0/((eps15 + 1.e-33)*wii(:,j)*Tauii(:,j))
+  enddo
   nuimpstar = 1.0/((eps15 + 1.e-33)*wimpimp*Tauimpimp)
 
   wca    = q_e*Za*B0/ma ! impurity cyclotron frequency
-  nuswca = L11impi/wca ! ratio of impurity collision frequency to cyclotron frequency
+  do j=1,nis
+    nuswca = L11impi(:,j)/wca ! ratio of impurity collision frequency to cyclotron frequency
+  enddo
 
   ! fitted factors
   call facs(nx, Za, ft, f1, f2, f3, y1, y2, y3, y4, adps)
-
-  g = nuistar*eps15 ! collisionality parameter
-  mu_ie = (96.0*sqrt2/125.0)*(1/Zi**2)*sqrt(me/mi)*(Ti15/Te15) ! ion-electron heat exchange term (Fülöp-Helander PoP '01)
-  alpha = Na*Za**2/(Ni*Zi**2) ! impurity strength parameter
-
-  do i = 1, nx
-    C0a(i) = C2(alpha(i), g(i), f1(i), f2(i), Aa, Ai)/(1 + f3(i)*mu_ie(i)*g(i)**2) ! coefficient of ion heat flux in impurity-ion friction
-    ki(i)  = ki_Redl(nuistar(i), ft(i), Zeff(i)) ! neoclassical ion flow coefficient
+  do j = 1,nis
+    g(:,j) = nuistar(:,j)*eps15 ! collisionality parameter
+    mu_ie(:,j) = (96.0*sqrt2/125.0)*(1/Zi(j)**2)*sqrt(me/mi(j))*(Ti15/Te15) ! ion-electron heat exchange term (Fülöp-Helander PoP '01)
+    alpha(:,j) = Na*Za**2/(Ni(:,j)*Zi(j)**2) ! impurity strength parameter
   enddo
 
-  rhoLimp2 = (2.0*q_e*Ta/ma)/wca**2 ! Impurity Larmor radius (squared)
+  do i = 1, nx
+    do j=1,nis
+      C0a(i,j) = C2(alpha(i,j), g(i,j), f1(i), f2(i), Aa, Ai(j))/(1 + f3(i)*mu_ie(i,j)*g(i,j)**2) ! coefficient of ion heat flux in impurity-ion friction
+      ki(i,j)  = ki_Redl(nuistar(i,j), ft(i), Zeff(i,j)) ! neoclassical ion flow coefficient
+    enddo
+  enddo
+
+  rhoLimp2 = (2.0*q_e*Ti/ma)/wca**2 ! Impurity Larmor radius (squared)
 
   ! thermodynamic gradients (for asymmetry calculations)
-  UU  = -(Za/Zi)*(C0a + ki)*grad_ln_Ti
-  GG  = grad_ln_na - (Za/Zi)*grad_ln_ni + (1 + (Za/Zi)*(C0a - 1))*grad_ln_Ti
+  do j =1,nis
+    UU(:,j)  = -(Za/Zi(j))*(C0a(:,j) + ki(:,j))*grad_ln_Ti
+    GG(:,j)  = grad_ln_na - (Za/Zi(j))*grad_ln_ni(:,j) + (1 + (Za/Zi(j))*(C0a(:,j) - 1))*grad_ln_Ti
+  enddo
 
-
+  UUeff=0.0
+  GGeff=0.0
+  do j=1,nis
+    UUeff += UU(:,j) 
+    GGeff += GG(:,j) 
+  enddo
   !---------------------------------------------------------------------------
   !-----------------------  Poloidal asymmetry  ------------------------------
   !---------------------------------------------------------------------------
@@ -286,14 +318,14 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
 
       call asymmetry_fg(nx, nth, theta, BV, RV, jacob, FV, dpsidx, Machi, L11impi, &
                         R0, Ai, Aa, Zi, Za, B2avg, UU, GG, PhiV, NV, Te, Ti, regulopt, &
-                        dmin, dmaj, nn)
+                        dmin, dmaj, nn, dmins, dmajs)
 
     else
 
       ! Poloidally symmetric case
 
-      dmin = 0.0_rkind
-      dmaj = 0.0_rkind
+      dmins = 0.0_rkind
+      dmajs = 0.0_rkind
       nn   = 1.0_rkind
       NV   = 1.0_rkind
 
@@ -327,10 +359,10 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
       dNV = AsymN(:,2)
 
       call asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai, Aa, Zi, Za, &
-                        dNH, dNV, dminphia, dmajphia, dmin, dmaj)
+                        dNH, dNV, dminphia, dmajphia, dmin, dmaj, dmins, dmajs)
 
       do i = 1, nx
-        nn(i,:) = 1.0 + dmin(i)*cos(theta) + dmaj(i)*sin(theta)
+        nn(i,:) = 1.0 + dmins(i)*cos(theta) + dmajs(i)*sin(theta)
       enddo
 
 
@@ -343,21 +375,21 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
       dNH = 0.0_rkind
       dNV = 0.0_rkind
 
-      dmin = 0.0_rkind
-      dmaj = 0.0_rkind
+      dmins = 0.0_rkind
+      dmajs = 0.0_rkind
       nn   = 1.0_rkind
 
     endif
 
 
-    dD2 = 0.5*(dmin**2 + dmaj**2)
+    dD2 = 0.5*(dmins**2 + dmajs**2)
 
     ! geometric coefficients in the equation for the flux
 
-    Cgeo_G = 2.0*epsk*dmin + 2.0*eps2 + dD2
-    Cgeo_U = epsk*(dNH - dmin) - dD2 + 0.5*(dmin*dNH + dmaj*dNV)
+    Cgeo_G = 2.0*epsk*dmins + 2.0*eps2 + dD2
+    Cgeo_U = epsk*(dNH - dmins) - dD2 + 0.5*(dmins*dNH + dmajs*dNV)
  
-    Cgeo_Gcl = 1.0 + epsk*dmin + 2*eps2  
+    Cgeo_Gcl = 1.0 + epsk*dmins + 2*eps2  
 
   endif
 
@@ -373,24 +405,44 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
   ! Pfirsch-Schlüter flux
 
   !Da_PS   = adps*ma*L11impi*FV**2*q_e*Ti*Cgeo_G*amin**2/(Za**2*q_e**2*B2avg*(dpsidx**2 + 1.e-33))
-  Da_PS   = adps*qmag**2*rhoLimp2*L11impi*(Cgeo_G/(2.0*eps2))
-  !Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
-  Ka_PS   = (Za/Zi)*Da_PS
-  Ha_PS   = -((1.0 + (Za/Zi)*(C0a - 1.0)) + (Cgeo_U/Cgeo_G)*(Za/Zi)*(C0a + ki))*Da_PS
-
-  Vra_PS  = -Da_PS*grad_ln_na/amin + Ka_PS*grad_ln_ni/amin + Ha_PS*grad_ln_Ti/amin 
-  Va_PS  = Ka_PS*grad_ln_ni/amin + Ha_PS*grad_ln_Ti/amin 
+  Da_PSs=0.0
+  Ka_PSs=0.0
+  Ha_PSs=0.0
+  Va_PSs=0.0
+  Vra_PSs=0.0
+  do j=1,nis
+    Da_PS(:,j)   = adps*qmag**2*rhoLimp2*L11impi*(Cgeo_G/(2.0*eps2))
+    !Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
+    Ka_PS(:,j)   = (Za/Zi(j))*Da_PS(:,j)
+    Ha_PS(:,j)   = -((1.0 + (Za/Zi(j))*(C0a(:,j) - 1.0)) + (Cgeo_U/Cgeo_G)*(Za/Zi(j))*(C0a(:,j) + ki(:,j)))*Da_PS(:,j)
+    Vra_PS(:,j)  = -Da_PS*grad_ln_na/amin + Ka_PS*grad_ln_ni/amin + Ha_PS*grad_ln_Ti/amin 
+    Va_PS(:,j)  = Ka_PS(:,j)*grad_ln_ni(:,j)/amin + Ha_PS(:,j)*grad_ln_Ti/amin
+    Da_PSs += Da_PS(:,j)
+    Ka_PSs += Ka_PS(:,j)
+    Ha_PSs += Ha_PS(:,j)
+    Vra_PSs += Vra_PS(:,j)
+    Va_PSs += Va_PS(:,j)
+  enddo 
 
 
   ! Classical flux
-
-  Da_CL   = (2.0*eps2*Cgeo_Gcl/Cgeo_G)*Da_PS/(2*qmag**2)
-  Ka_CL   = (Za/Zi)*Da_CL
-  Ha_CL   = -(1.0 + (Za/Zi)*(C0a - 1.0))*Da_CL
-
-  Vra_CL  = -Da_CL*grad_ln_na/amin + Ka_CL*grad_ln_ni/amin + Ha_CL*grad_ln_Ti/amin
-  Va_CL = Ka_CL*grad_ln_ni/amin + Ha_CL*grad_ln_Ti/amin
-
+  Da_CLs=0.0
+  Ka_CLs=0.0
+  Ha_CLs=0.0
+  Va_CLs=0.0
+  Vra_CLs=0.0
+  do j=1,nis
+    Da_CL(:,j)   = (2.0*eps2*Cgeo_Gcl/Cgeo_G)*Da_PS(:,j)/(2*qmag**2)
+    Ka_CL(:,j)   = (Za/Zi(j))*Da_CL(:,j)
+    Ha_CL(:,j)   = -(1.0 + (Za/Zi(j))*(C0a(:,j) - 1.0))*Da_CL(:,j)
+    Vra_CL(:,j)  = -Da_CL(:,j)*grad_ln_na/amin + Ka_CL(:,j)*grad_ln_ni(:,j)/amin + Ha_CL(:,j)*grad_ln_Ti/amin
+    Va_CL(:,j) = Ka_CL(:,j)*grad_ln_ni(:,j)/amin + Ha_CL(:,j)*grad_ln_Ti/amin
+    Da_CLs += Da_CL(:,j)
+    Ka_CLs += Ka_CL(:,j)
+    Ha_CLs += Ha_CL(:,j)
+    Vra_CLs += Vra_CL(:,j)
+    Va_CLs += Va_CL(:,j)
+  enddo
 
   ! Banana-Plateau flux
 
@@ -399,28 +451,44 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
               K11a, K12a, K22a, K11i, K12i, K22i)
 
 
-  Da_BP = 1.5*q_e*Ti*(1.0/(1.0/K11a + 1.0/K11i))/(Za**2*q_e**2*FV**2*Na)
-  Ka_BP = (Za/Zi)*Da_BP
-  Ha_BP = ((Za/Zi)*(K12i/K11i - 1.5) - (K12a/K11a - 1.5))*Da_BP
+  Da_BPs=0.0
+  Ka_BPs=0.0
+  Ha_BPs=0.0
+  Va_BPs=0.0
+  Vra_BPs=0.0
+  do j=1,nis
+    Da_BP = 1.5*q_e*Ti*(1.0/(1.0/K11a(:,j) + 1.0/K11i(:,j)))/(Za**2*q_e**2*FV**2*Na)
+    Ka_BP = (Za/Zi(j))*Da_BP(:,j)
+    Ha_BP = ((Za/Zi(j))*(K12i(:,j)/K11i(:,j) - 1.5) - (K12a(:,j)/K11a(:,j) - 1.5))*Da_BP(:,j)
 
-  Vra_BP = -Da_BP*grad_ln_na/amin + Ka_BP*grad_ln_ni/amin + Ha_BP*grad_ln_Ti/amin
-  Va_BP = Ka_BP*grad_ln_ni/amin + Ha_BP*grad_ln_Ti/amin
- 
+    Vra_BP(:,j) = -Da_BP(:,j)*grad_ln_na/amin + Ka_BP(:,j)*grad_ln_ni(:,j)/amin + Ha_BP(:,j)*grad_ln_Ti/amin
+    Va_BP(:,j) = Ka_BP(:,j)*grad_ln_ni(:,j)/amin + Ha_BP(:,j)*grad_ln_Ti/amin
+    Da_BPs += Da_BP(:,j)
+    Ka_BPs += Ka_BP(:,j)
+    Ha_BPs += Ha_BP(:,j)
+    Vra_BPs += Vra_BP(:,j)
+    Va_BPs += Va_BP(:,j)
 
   ! Total transport coefficients
 
-  Da = Da_PS + Da_BP + Da_CL ! total diffusion coefficient
+  Da = Da_PS + Da_BP + Da_CL ! total diffusion coefficient matrix
   Ka = Ka_PS + Ka_BP + Ka_CL
   Ha = Ha_PS + Ha_BP + Ha_CL
+
+  Das = Da_PSs + Da_BPs + Da_CLs ! total diffusion coefficient
+  Kas = Ka_PSs + Ka_BPs + Ka_CLs
+  Has = Ha_PSs + Ha_BPs + Ha_CLs
 
   !Vra = Vra_PS + Vra_BP + Vra_CL
 
   ! total convective velocity
-  Vconv = Ka*grad_ln_ni/amin + Ha*grad_ln_Ti/amin
+  do j = 1,nis
+    Vconv = Ka(:,j)*grad_ln_ni(:,j)/amin + Ha(:,j)*grad_ln_Ti/amin !check 
+  
 
   ! Total surface-averaged flux
-  Flux_imp = -Da*gradNa + Na*Vconv
-
+    Flux_imp(:,j) = -Da(:,j)*gradNa + Na*Vconv(:,j)
+  enddo
 
   return
 end subroutine FACIT
@@ -433,7 +501,7 @@ end subroutine FACIT
 
 
 
-subroutine fluxavg(nx,nth,thetay,AF,JJ,Aavg)
+subroutine fluxavg(nx,nth,thetay,AF,JJ,Aavg) !check
 
 !*******************************************************************************
 ! Calculates the flux surface average (FSA) of a function AF(x,theta)
@@ -482,12 +550,12 @@ subroutine fluxavg(nx,nth,thetay,AF,JJ,Aavg)
   enddo
 
   return
-end subroutine fluxavg
+end subroutine fluxavg 
 
 
 
 
-subroutine fluxavgscal(nth,thetay,AF,JJ,Aavg)
+subroutine fluxavgscal(nth,thetay,AF,JJ,Aavg) !check
 
 !*******************************************************************************
 ! Calculates the flux surface average (FSA) of a function AF(x0, theta) at a
@@ -561,7 +629,7 @@ end function ftrap
 
 
 subroutine asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai, Aa, Zi, Za, &
-                        dNH, dNV, dminphia, dmajphia, dmin, dmaj)
+                        dNH, dNV, dminphia, dmajphia, dmin, dmaj, dmins, dmajs)
 
 !*******************************************************************************
 ! Poloidal asymmetry of the impurity density distribution, analytical
@@ -589,20 +657,24 @@ subroutine asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai
 !*******************************************************************************
 ! OUTPUTS:
 ! --------
-! dmin -----> horizontal asymmetry of impurity density [-] {arr, nx}
-! dmaj -----> vertical asymmetry of impurity density [-] {arr, nx}
+! dmin -----> horizontal asymmetry of impurity density Matrix [-] {arr, nx}
+! dmaj -----> vertical asymmetry of impurity density Matrix [-] {arr, nx}
+! dmins -----> horizontal asymmetry of impurity density sum [-] {arr, nx}
+! dmajs -----> vertical asymmetry of impurity density sum [-] {arr, nx}
 !*******************************************************************************
 
   use constants, only: rkind
   implicit none
 
-  integer :: nx
-  real(rkind), dimension(nx) :: UU, GG, epsK, qmag, nuswca, deltaM, Za, dNH, dNV
+  integer :: nx, nis
+  real(rkind), dimension(nx) :: epsK, qmag, deltaM, Za
+  real(rkind), dimension(nx,nis) :: UU, GG, nuswca, dNH, dNV, Zi
   real(rkind), dimension(nx) :: dminphia, dmajphia, xn
-  real(rkind) :: Ai, Aa, Zi, invaspct
-  real(rkind), dimension(nx) :: dmin, dmaj
-  real(rkind), dimension(nx) :: RR, UG, Ae, AGe, CD0, HH, QQ, FF, KK, CD, CDV
-  real(rkind), dimension(nx) :: RD, DD, num, cosa, sina
+  real(rkind) :: Aa, invaspct
+  real(rkind), dimension(nis) :: Ai
+  real(rkind), dimension(nx,nis) :: dmin, dmaj
+  real(rkind), dimension(nx,nis) :: RR, UG, Ae, AGe, CD0, HH, QQ, FF, KK, CD, CDV
+  real(rkind), dimension(nx) :: RD, DD, num, cosa, sina, dmins, dmajs
 
 
 
@@ -612,33 +684,112 @@ subroutine asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai
 
   UG = 1 + UU/GG
   !Ae = nuswca*qmag**2/(epsk + 1.e-33)
-  Ae = nuswca*qmag**2/invaspct
+  do j= 1,nis
+    Ae(:,j) = nuswca(:,j)*qmag**2/invaspct
+  enddo
   AGe = Ae*GG
-  CD0 = -(epsk + 1.e-33)/UG
+  do j = 1,nis
+    CD0 = -(epsk + 1.e-33)/UG(:,j)
+  enddo
   !HH = 1.0 + deltaM*CD0*RR/GG
   HH = 1.0_rkind
   !QQ = CD0*(dNV/(epsk + 1.e-33))*UU/GG
-  QQ = CD0*(dNV/(epsk + 1.e-33))*(UG-1.0)
+  do j=1,nis
+    QQ(:,j) = CD0(:,j)*(dNV(:,j)/(epsk + 1.e-33))*(UG(:,j)-1.0)
+  
   !FF = CD0*(1-0.5*dNH/(epsk + 1.e-33)*UU/GG - deltaM*(RR/GG)/(epsk + 1.e-33))
   !FF = CD0*(1-0.5*dNH*(UG-1.0)/(epsk + 1.e-33) - deltaM*(RR/GG)/(epsk + 1.e-33))
-  FF = CD0*(1-0.5*dNH*(UG-1.0)/(epsk + 1.e-33) )
+    FF(:,j) = CD0(:,j)*(1-0.5*dNH(:,j)*(UG(:,j)-1.0)/(epsk + 1.e-33) )
+  enddo
   KK = 1.0_rkind
 
-  CD = FF - 0.5*(dminphia - deltaM)
-  CDV = -0.5*(dmajphia + QQ)
-  RD = sqrt((FF + 0.5*(dminphia-deltaM))**2 + 0.25*(dmajphia - QQ)**2)
-  DD = RD**2 + AGe**2*(RD/CD0)**2
 
-  num  = ((AGe/CD0)**2 - 1)*(FF/(CD0) + 0.5*(dminphia-deltaM)/CD0) + &
-         (AGe/CD0)*(0.5*dNV*(UG-1.0)/(epsk + 1.e-33) - 0.5*dmajphia/CD0)
-  cosa = RD*CD0*num/DD
+  do j= 1,nis
+    CD = FF - 0.5*(dminphia - deltaM)
+    CDV(:,j) = -0.5*(dmajphia + QQ(:,j))
+    RD(:,j) = sqrt((FF(:,j) + 0.5*(dminphia-deltaM))**2 + 0.25*(dmajphia - QQ(:,j))**2)
+    DD(:,j) = RD(:,j)**2 + AGe**2*(RD(:,j)/CD0(:,j))**2
 
-  num  = 2*AGe*(FF/CD0 + 0.5*(dminphia-deltaM)/CD0)+((AGe/CD0)**2-1)*&
-         (0.5*dmajphia - 0.5*dNV*CD0*(UG-1.0)/((epsk + 1.e-33)))
-  sina = RD*num/DD
+    num(:,j)  = ((AGe(:,j)/CD0(:,j))**2 - 1)*(FF(:,j)/(CD0(:,j)) + 0.5*(dminphia-deltaM)/CD0(:,j)) + &
+          (AGe(:,j)/CD0(:,j))*(0.5*dNV(:,j)*(UG(:,j)-1.0)/(epsk + 1.e-33) - 0.5*dmajphia/CD0(:,j))
+    cosa(:,j) = RD(:,j)*CD0(:,j)*num(:,j)/DD(:,j)
 
+    num(:,j)  = 2*AGe(:,j)*(FF(:,j)/CD0(:,j) + 0.5*(dminphia-deltaM)/CD0(:,j))+((AGe(:,j)/CD0(:,j))**2-1)*&
+          (0.5*dmajphia - 0.5*dNV(:,j)*CD0(:,j)*(UG(:,j)-1.0)/((epsk + 1.e-33)))
+    sina(:,j) = RD(:,j)*num(:,j)/DD(:,j)
+  enddo
   dmin = CD + RD*cosa
   dmaj = CDV + RD*sina
+
+  dmajs = 0.0_rkind
+  dmins = 0.0_rkind
+
+  do j = 1,nis
+    dmins += dmin
+    dmajs += dmajs
+  enddo
+
+
+end subroutine asymmetry_an
+
+!New subroutine for matrix calculation. 
+
+subroutine asymmetry_an_mat(nx, xn, UU, GG, epsk, J, F, invaspct, qmag, nuswca, deltaM, Ai, Aa, Zi, R0,B0 Za, &
+                        dNH, dNV, dminphia, dmajphia, dmin_M, dmaj_M)
+
+!*******************************************************************************
+! Poloidal asymmetry of the impurity density distribution, analytical
+! calculation in circular geometry
+!*******************************************************************************
+! INPUTS:
+! -------
+! nx -------> size of radial arrays [-] {int}
+! xn -------> radial grid [-] {arr, nx}
+! UU -------> thermodynamic gradient U [-] {arr, nx}
+! GG -------> thermodynamic gradient G [-] {arr, nx}
+! epsK -----> local inverse aspect ratio [-] {arr, nx}
+! invaspct -> inverse aspect ratio [-] {float}
+! qmag -----> safety factor [-] {arr, nx}
+! nuswca ---> ratio of impurity coll. freq. to cyclotron freq. [-] {arr, nx}
+! deltaM ---> rotation strength parameter [-] {arr, nx}
+! Ai -------> main ion mass number [-] {float}
+! Aa -------> impurity mass number [-] {float}
+! Zi -------> main ion charge number [-] {float}
+! Za -------> impurity charge number [-] {arr, nx}
+! dNH ------> horizontal asymmetry of main ion density [-] {arr, nx}
+! dNV ------> vertical asymmetry of main ion density [-] {arr, nx}
+! dminphia -> horizontal asymmetry of electrostatic potential [-] {arr, nx}
+! dmajphia -> vertical asymmetry of electrostatic potential [-] {arr, nx}
+!*******************************************************************************
+! OUTPUTS:
+! --------
+! dmin_M -----> horizontal asymmetry of impurity density Matrix solution [-] {arr, nx}
+! dmaj_M -----> vertical asymmetry of impurity density Matrix solution [-] {arr, nx}
+!*******************************************************************************
+
+  use constants, only: rkind
+  implicit none
+
+  integer :: nx, nis
+  real(rkind), dimension(nx) :: epsK, qmag, deltaM, Za, J,F
+  real(rkind), dimension(nx,nis) :: UU, GG, nuswca, dNH, dNV, Zi, A_M
+  real(rkind), dimension(nx) :: dminphia, dmajphia, xn
+  real(rkind) :: Aa, invaspct, ma, R0, B0
+  real(rkind), dimension(nis) :: Ai
+  real(rkind), dimension(nx,nis) :: dmin_M, dmaj_M
+  
+  ma= Aa*mp
+
+  do j = 1,nis
+    A_M(:,j) = J*F*ma*nuswca(:,j)/(Za*q_e)
+  enddo 
+  detinv = 1/(1+A_M**2 *(GG+UU)**2)
+
+  fact= qmag/(xn*R0*B0)
+
+  dmin_M = detinv*(A_M*de)
+
+
 
 end subroutine asymmetry_an
 
@@ -1057,28 +1208,34 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
   use constants, only: rkind, mp, q_e, pi, sqrt2
   implicit none
 
-  integer :: nx
-  real(rkind), dimension(nx) :: ni, nimp, Ti, wii, wimpimp, Tauii, Tauimpi, Tauiimp, Tauimpimp, eps2, qmag, ft
-  real(rkind) :: Zi, Ai, Aimp, R0, mimp, mi
+  integer :: nx,nis
+  real(rkind), dimension(nx,nis) :: ni, wii, Tauii, Tauimpi, Tauiimp
+  real(rkind), dimension(nx) :: nimp, Ti, wimpimp, Tauimpimp, eps2, qmag, ft
+  real(rkind), dimension(nis) :: Zi, Ai, mi
+  real(rkind) ::  Aimp, R0, mimp
   !real(dp) :: Zimp
   real(rkind), dimension(nx) :: Zimp
-  real(rkind), dimension(nx) :: K11a, K12a, K22a, K11i, K12i, K22i
+  real(rkind), dimension(nx,nis) :: K11a, K12a, K22a, K11i, K12i, K22i
   !real(dp) :: f1, f2, f3
   real(rkind), dimension(nx) :: y1, y2, y3, y4
 
-  real(rkind), dimension(nx) :: fac_a_P, fac_i_P, K11aP, K12aP, K22aP, K11iP, K12iP, K22iP
-  real(rkind) :: r00, r01, r11, xai, xia, x2ai, x2ia, xfac_ai, xfac_ia
+  real(rkind), dimension(nx) :: fac_a_P, K11aP, K12aP, K22aP
+  real(rkind), dimension(nx,nis) :: fac_i_P, K11iP, K12iP, K22iP
+  real(rkind) :: r00, r01, r11
+  real(rkind), dimension(nis) :: xai, xia, x2ai, x2ia, xfac_ai, xfac_ia
   real(rkind) :: qaa00, qaa01, qaa11, qai00, qia00, qai01, qia01, qai11, qia11
-  real(rkind), dimension(nx) :: fac_qai_PS, fac_qia_PS
-  real(rkind), dimension(nx) :: qa00, qi00, qa01, qi01, qa11, qi11, Qa, Qi
-  real(rkind), dimension(nx) :: la11, la12, la22, li11, li12, li22
-  real(rkind), dimension(nx) :: fac_imp_PS, fac_ion_PS
-  real(rkind), dimension(nx) :: K11aPS, K12aPS, K22aPS, K11iPS, K12iPS, K22iPS
-  real(rkind), dimension(nx) :: fac_B, nuDai, nuD2ai, nuD4ai
-  real(rkind), dimension(nx) :: nuDia, nuD2ia, nuD4ia
+  real(rkind), dimension(nx,nis) :: fac_qai_PS, fac_qia_PS
+  real(rkind), dimension(nx,nis) :: qa00, qi00, qa01, qi01, qa11, qi11, Qa, Qi
+  real(rkind), dimension(nx,nis) :: la11, la12, la22, li11, li12, li22
+  real(rkind), dimension(nx) :: fac_imp_PS 
+  real(rkind), dimension(nx,nis) :: fac_ion_PS
+  real(rkind), dimension(nx,nis) :: K11aPS, K12aPS, K22aPS, K11iPS, K12iPS, K22iPS
+  real(rkind), dimension(nx) :: fac_B
+  real(rkind), dimension(nx,nis) :: nuDai, nuD2ai, nuD4ai
+  real(rkind), dimension(nx,nis) :: nuDia, nuD2ia, nuD4ia
   real(rkind), dimension(nx) :: nuDaa, nuD2aa, nuD4aa
-  real(rkind), dimension(nx) :: nuDii, nuD2ii, nuD4ii
-  real(rkind), dimension(nx) :: K11aB, K12aB, K22aB, K11iB, K12iB, K22iB
+  real(rkind), dimension(nx,nis) :: nuDii, nuD2ii, nuD4ii
+  real(rkind), dimension(nx,nis) :: K11aB, K12aB, K22aB, K11iB, K12iB, K22iB
 
 
   mimp = Aimp*mp
@@ -1087,8 +1244,10 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
 
   ! Plateau regime
 
-  fac_a_P = nimp*(q_e*Ta)*SQRT(pi)/(3.0*wimpimp)
-  fac_i_P = ni*(q_e*Ti)*SQRT(pi)/(3.0*wii)
+  fac_a_P = nimp*(q_e*Ti)*SQRT(pi)/(3.0*wimpimp)
+  do j = i,nis
+  fac_i_P(:,j) = ni(:,j)*(q_e*Ti)*SQRT(pi)/(3.0*wii(:,j))
+  enddo
 
   K11aP = fac_a_P*2.0
   K12aP = fac_a_P*2.0*3.0
@@ -1126,19 +1285,21 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
   qai11 = (35.0*x2ai**3 + 38.5*x2ai**2 + 46.25*x2ai + 12.75)/xfac_ai**7
   qia11 = (35.0*x2ia**3 + 38.5*x2ia**2 + 46.25*x2ia + 12.75)/xfac_ia**7
 
-  fac_qai_PS = (ni*Zi**2/(nimp*Zimp**2))
-  fac_qia_PS = (nimp*Zimp**2/(ni*Zi**2))
+  do j= 1,nis
+    fac_qai_PS(:,j) = (ni(:,j)*Zi(j)**2/(nimp*Zimp**2))
+    fac_qia_PS(:,j) = (nimp*Zimp**2/(ni(:,j)*Zi(j)**2))
+  enddo
 
+  do j=1,nis
+    qa00(:,j) = fac_qai_PS(:,j)*qai00 +  qaa00 - r00
+    qi00(:,j) = fac_qia_PS(:,j)*qia00 + qaa00 - r00
 
-  qa00 = fac_qai_PS*qai00 +  qaa00 - r00
-  qi00 = fac_qia_PS*qia00 + qaa00 - r00
+    qa01(:,j) = fac_qai_PS(:,j)*qai01 + qaa01 - r01
+    qi01(:,j) = fac_qia_PS(:,j)*qia01 + qaa01 - r01
 
-  qa01 = fac_qai_PS*qai01 + qaa01 - r01
-  qi01 = fac_qia_PS*qia01 + qaa01 - r01
-
-  qa11 = fac_qai_PS*qai11 + qaa11 - r11
-  qi11 = fac_qia_PS*qia11 + qaa11 - r11
-
+    qa11(:,j) = fac_qai_PS(:,j)*qai11 + qaa11 - r11
+    qi11(:,j) = fac_qia_PS(:,j)*qia11 + qaa11 - r11
+  enddo
 
   Qa = 0.4*(qa00*qa11-qa01*qa01)
   Qi = 0.4*(qi00*qi11-qi01*qi01)
@@ -1153,12 +1314,15 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
   li22 = 12.25*(qi11+qi00 + 2.0*qi01)/Qi
 
   fac_imp_PS = nimp*(q_e*Ti)*Tauimpimp
-  fac_ion_PS = ni*(q_e*Ti)*Tauii
+  do j= 1,nis
+    fac_ion_PS(:,j) = ni(:,j)*(q_e*Ti)*Tauii(:,j)
+  enddo
 
-
-  K11aPS = fac_imp_PS*la11
-  K12aPS = fac_imp_PS*la12
-  K22aPS = fac_imp_PS*la22
+  do j=1,nis
+    K11aPS(:,j) = fac_imp_PS*la11(:,j)
+    K12aPS(:,j) = fac_imp_PS*la12(:,j)
+    K22aPS(:,j) = fac_imp_PS*la22(:,j)
+  enddo
 
   K11iPS = fac_ion_PS*li11
   K12iPS = fac_ion_PS*li12
@@ -1172,13 +1336,15 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
 
   ! Maxwellian integrals
 
-  nuDai  = (xfac_ai + x2ai*LOG(xai/(1 + xfac_ai)))/Tauimpi
-  nuD2ai = 1.0/(xfac_ai*Tauimpi)
-  nuD4ai = 2.0*(1.0 + 1.25*x2ai)/(xfac_ai**3*Tauimpi)
+  do j = 1,nis
+    nuDai(:,j)  = (xfac_ai + x2ai*LOG(xai/(1 + xfac_ai)))/Tauimpi(:,j)
+    nuD2ai(:,j) = 1.0/(xfac_ai*Tauimpi(:,j))
+    nuD4ai(:,j) = 2.0*(1.0 + 1.25*x2ai)/(xfac_ai**3*Tauimpi(:,j))
 
-  nuDia  = (xfac_ia + x2ia*LOG(xia/(1 + xfac_ia)))/Tauiimp
-  nuD2ia = 1.0/(xfac_ia*Tauiimp)
-  nuD4ia = 2.0*(1.0 + 1.25*x2ia)/(xfac_ia**3*Tauiimp)
+    nuDia(:,j)  = (xfac_ia + x2ia*LOG(xia/(1 + xfac_ia)))/Tauiimp(:,j)
+    nuD2ia(:,j) = 1.0/(xfac_ia*Tauiimp(:,j))
+    nuD4ia(:,j) = 2.0*(1.0 + 1.25*x2ia)/(xfac_ia**3*Tauiimp(:,j))
+  enddo
 
   nuDaa  = (sqrt2 + LOG(1/(1 + sqrt2)))/Tauimpimp
   nuD2aa = 1.0/(sqrt2*Tauimpimp)
@@ -1190,26 +1356,29 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
 
   ! Banana regime viscosity coefficient
 
-  K11aB = fac_B*nimp*mimp*(nuDai + nuDaa)
-  K12aB = fac_B*nimp*mimp*(nuD2ai + nuD2aa)
-  K22aB = fac_B*nimp*mimp*(nuD4ai + nuD4aa)
+  do j=1,nis
+    K11aB(:,j) = fac_B*nimp*mimp*(nuDai(:,j) + nuDaa)
+    K12aB(:,j) = fac_B*nimp*mimp*(nuD2ai(:,j) + nuD2aa)
+    K22aB(:,j) = fac_B*nimp*mimp*(nuD4ai(:,j) + nuD4aa)
 
-  K11iB = fac_B*ni*mi*(nuDia + nuDii)
-  K12iB = fac_B*ni*mi*(nuD2ia + nuD2ii)
-  K22iB = fac_B*ni*mi*(nuD4ia + nuD4ii)
+    K11iB(:,j) = fac_B*ni(:,j)*mi(j)*(nuDia(:,j) + nuDii(:,j))
+    K12iB(:,j) = fac_B*ni(:,j)*mi(j)*(nuD2ia(:,j) + nuD2ii(:,j))
+    K22iB(:,j) = fac_B*ni(:,j)*mi(j)*(nuD4ia(:,j) + nuD4ii(:,j))
+  enddo
 
   ! total viscosity coefficients, rational approximation for interpolation
+  do j= 1,nis 
+  K11a(:,j) = y1*K11aB(:,j)/((1.0 + y1*K11aB(:,j)/(K11aP))*(1.0 + K11aP/(K11aPS(:,j))))
+  K12a(:,j) = K12aB(:,j)/((1.0 + K12aB(:,j)/(y2*K12aP))*(1.0 + y2*K12aP/(y3*K12aPS(:,j))))
+  K22a(:,j) = K22aB(:,j)/((1.0 + K22aB(:,j)/(K22aP))*(1.0 + K22aP/(K22aPS(:,j))))
 
-  K11a = y1*K11aB/((1.0 + y1*K11aB/(K11aP))*(1.0 + K11aP/(K11aPS)))
-  K12a = K12aB/((1.0 + K12aB/(y2*K12aP))*(1.0 + y2*K12aP/(y3*K12aPS)))
-  K22a = K22aB/((1.0 + K22aB/(K22aP))*(1.0 + K22aP/(K22aPS)))
-
-  K11i = K11iB/((1.0 + K11iB/(K11iP))*(1.0 + K11iP/(K11iPS)))
-  K12i = y4*K12iB/((1.0 + y4*K12iB/(K12iP))*(1.0 + K12iP/(K12iPS)))
-  K22i = K22iB/((1.0 + K22iB/(K22iP))*(1.0 + K22iP/(K22iPS)))
+  K11i(:,j) = K11iB(:,j)/((1.0 + K11iB(:,j)/(K11iP(:,j)))*(1.0 + K11iP(:,j)/(K11iPS(:,j))))
+  K12i(:,j) = y4*K12iB(:,j)/((1.0 + y4*K12iB/(K12iP(:,j)))*(1.0 + K12iP(:,j)/(K12iPS(:,j))))
+  K22i(:,j) = K22iB(:,j)/((1.0 + K22iB(:,j)/(K22iP(:,j)))*(1.0 + K22iP(:,j)/(K22iPS(:,j))))
 
 
 
   return
 end subroutine K_VISC
+
 
