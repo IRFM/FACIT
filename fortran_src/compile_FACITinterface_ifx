@@ -2,6 +2,4 @@ ifx -c constants.f90 -o constants.o
 ifx -c facit.f90 -o facit.o -llapack
 ifx -c FACIT_interface.f90 -o FACIT_interface.o
 ifx -O2 -r8 -mcmodel=large facit.o FACIT_interface.o constants.o -o FACIT_interface -llapack
-#ifx -O0 -C -g -traceback -check all -r8 -mcmodel=large facit.o FACIT_interface.o constants.o -o FACIT_interface -llapack
-#ifx -O2 -r8 -mcmodel=large  facit.o FACIT_interface.o constants.o -o FACIT_interface -L/shared/hpc/compiler/intel/composerxe-2011.2.137/mkl/lib/intel64  -lmkl_lapack95_lp64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -liomp5
 
