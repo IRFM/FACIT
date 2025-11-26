@@ -4,7 +4,7 @@
 ! CEA and IPP authorize the use of the FACIT software under the CeCILL-C open source license https://cecill.info/licences/Licence_CeCILL-C_V1-en.html  
 ! The terms and conditions of the CeCILL-C license are deemed to be accepted upon downloading the software and/or exercising any of the rights granted under the CeCILL-C license.
 ! 
-subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid parameters
+subroutine FACIT(nx, nth, xn,nions, theta, &                                ! grid parameters
                  Za, Aa, Zi, Ai, &                                    ! impurity and main ion charge and mass
                  Te, Ti, Ne, Ni, Na, Machi, &                         ! plasma profiles
                  gradTi, gradNi, gradNa, &                            ! gradients
@@ -35,21 +35,21 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
 ! ------------
 ! nx --------> size of radial arrays [-] {int}
 ! nth -------> size of poloidal arrays [-] {int}
-!nis --------> number of ion species [-] {int}
+!nions --------> number of ion species [-] {int}
 ! xn --------> radial coordinate [-] {arr, nx}
 ! theta -----> poloidal coordinate [-] {arr, nth}
 ! Za --------> impurity charge number [-] {arr, nx}
 ! Aa --------> impurity mass number [-] {float}
-! Zi --------> main ion charge number [-] {array, (nx, nis)}
-! Ai --------> main ion mass number [-] {array, nis}
+! Zi --------> main ion charge number [-] {array, (nx, nions)}
+! Ai --------> main ion mass number [-] {array, nions}
 ! Te --------> electron temperature [eV] {arr, nx}
 ! Ti --------> main ion temperature [eV] {arr, nx}
 ! Ne --------> electron density [1/m^3] {arr, nx}
-! Ni --------> main ion denisty [1/m^3] {arr, (nx,nis)}
+! Ni --------> main ion denisty [1/m^3] {arr, (nx,nions)}
 ! Na --------> impurity density [1/m^3] {arr, nx}
 ! Machi -----> Mach number of main ion [-] {arr, nx} check
 ! gradTi ----> main ion temperature gradient [eV/-] {arr, nx}
-! gradNi ----> main ion density gradient [1/m^3/-] {arr, (nx,nis)}
+! gradNi ----> main ion density gradient [1/m^3/-] {arr, (nx,nions)}
 ! gradNa ----> impurity density gradient [1/m^3/-] {arr, nx}
 ! invaspct --> inverse aspect ratio [-] {float}
 ! B0 --------> magnetic field at magnetic axis [T] {float}
@@ -88,58 +88,57 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
   !------------------------------ declarations --------------------------------
 
   ! INPUTS
-  integer :: nx, nth, nis
+  integer :: nx, nth, nions
   real(rkind), dimension(nth) :: theta
   real(rkind), dimension(nx)  :: Te, Ti, gradTi, Ne, gradNa
-  real(rkind), dimension(nx,nis)  :: Ni, gradNi
+  real(rkind), dimension(nx,nions)  :: Ni, gradNi
   real(rkind), dimension(nx)  :: qmag, xn, dpsidx, FV, Za
-  real(rkind), dimension(nx)  :: Machi !check
+  real(rkind), dimension(nx)  :: Machi 
   real(rkind) :: B0, R0, invaspct, Aa
-  real(rkind), dimension(nis)  :: Ai
-  real(rkind), dimension(nx,nis)  :: Zi
+  real(rkind), dimension(nions)  :: Ai
+  real(rkind), dimension(nx,nions)  :: Zi
   real(rkind), dimension(nx,nth) :: jacob, BV, RV, PhiV, NV
   real(rkind), dimension(nx,2) :: AsymPhi, AsymN
   real(rkind), dimension(4) :: regulopt
   logical :: pol_asym, full_geom, rotation
 
   ! OUTPUTS
-  real(rkind), dimension(nx,nis) :: Da, Vconv, Flux_imp, dmin, dmaj
-  real(rkind), dimension(nx) ::  Das, dmins, dmajs
+  real(rkind), dimension(nx,nions) :: Da, Vconv, Flux_imp, dmin, dmaj
+  real(rkind), dimension(nx) ::  Das, dmins, dmajs, Vconvs, Flux_imps
   real(rkind), dimension(nx, nth) :: nn
-  real(rkind), dimension(nx,nis) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CL, Ha_BP, Ha_PS, Ha_CL, Va_BP, Va_PS, Va_CL
+  real(rkind), dimension(nx,nions) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CL, Ha_BP, Ha_PS, Ha_CL, Va_BP, Va_PS, Va_CL
   real(rkind), dimension(nx) :: Da_BPs, Da_PSs, Da_CLs, Ka_BPs, Ka_PSs, Ka_CLs, Ha_BPs, Ha_PSs, Ha_CLs, Va_BPs, Va_PSs, Va_CLs
 
   ! OTHER
   integer :: i,j, p, n, it, ix!, info, ierr, ierrmax
   real(rkind) :: amin, ma, ftrap, ki_Redl, C2
-  real(rkind), dimension(nis)  :: mi
+  real(rkind), dimension(nions)  :: mi
   real(rkind), dimension(nx) ::  grad_ln_na, Te15, Ti15, grad_ln_Ti
-  real(rkind), dimension(nx,nis)  :: grad_ln_ni
-  real(rkind), dimension(nx) :: epsk, eps15, eps2, ft, wca, dD2
-  real(rkind), dimension(nx,nis) :: deltaM,ki, C0a, g  !check deltaM
+  real(rkind), dimension(nx,nions)  :: grad_ln_ni
+  real(rkind), dimension(nx) :: epsk, eps15, eps2, ft, wca, dD2, deltaM
+  real(rkind), dimension(nx,nions) :: ki, C0a, g  
   real(rkind), dimension(nx) :: f1, f2, f3, y1, y2, y3, y4, adps
   real(rkind), dimension(nx) :: LneeNRL, LneimpNRL
-  real(rkind), dimension(nx,nis) :: LneiNRL
+  real(rkind), dimension(nx,nions) :: LneiNRL
   real(rkind), dimension(nx) :: LnimpeNRL, LnimpimpNRL
-  real(rkind), dimension(nx,nis) :: LniiNRL, LniimpNRL
+  real(rkind), dimension(nx,nions) :: LniiNRL, LniimpNRL
   real(rkind), dimension(nx) :: Tauee, Taueimp
-  real(rkind), dimension(nx,nis) :: Tauei
-  real(rkind), dimension(nx,nis) :: Tauie, Tauii, Tauiimp
+  real(rkind), dimension(nx,nions) :: Tauei
+  real(rkind), dimension(nx,nions) :: Tauie, Tauii, Tauiimp
   real(rkind), dimension(nx) :: Tauimpe, Tauimpimp
-  real(rkind), dimension(nx,nis) :: Tauimpi
+  real(rkind), dimension(nx,nions) :: Tauimpi
   real(rkind), dimension(nx) :: wee, wimpimp, nuestar, nuimpstar, rhoLimp2
-  real(rkind), dimension(nx,nis) :: wii, nuistar
-  real(rkind), dimension(nx, nis) :: L11impi, nuswca, mu_ie, alpha, Zeff
-  real(rkind), dimension(nx) ::  B2avg, dNH, dNV, dminphia, dmajphia
-  real(rkind), dimension(nx,nis) :: UU, GG
-  real(rkind), dimension(nx) :: UUeff, GGeff
+  real(rkind), dimension(nx,nions) :: wii, nuistar
+  real(rkind), dimension(nx, nions) :: L11impi, nuswca, mu_ie, alpha
+  real(rkind), dimension(nx) ::  B2avg, dNH, dNV, dminphia, dmajphia, Zeff
+  real(rkind), dimension(nx,nions) :: UU, GG
   real(rkind), dimension(nx) :: Cgeo_G, Cgeo_U, Cgeo_Gcl
   real(rkind), dimension(nx, nth) :: b2
   real(rkind), dimension(nx) :: b2navg, nb2avg, nNVavg, b2NVavg
   real(rkind), dimension(nx) :: K11a, K12a, K22a
-  real(rkind), dimension(nx,nis) :: K11i, K12i, K22i
-  real(rkind), dimension(nx,nis) :: Vra_BP, Vra_PS, Vra_CL
-  real(rkind), dimension(nx,nis) :: Ka, Ha
+  real(rkind), dimension(nx,nions) :: K11i, K12i, K22i
+  real(rkind), dimension(nx,nions) :: Vra_BP, Vra_PS, Vra_CL
+  real(rkind), dimension(nx,nions) :: Ka, Ha
 
   ! External procedures defined in LAPACK
   external DGETRF
@@ -160,8 +159,9 @@ subroutine FACIT(nx, nth, xn,nis, theta, &                                ! grid
 	dpsidx = amin**2*B0*xn/qmag
   endif
 
-do j = 1,nis
-  Zeff(:,j) = (Za**2*Na + Zi(j)**2*Ni(:,j))/(Ne)
+Zeff =Za**2*Na/(Ne)
+do j = 1,nions
+  Zeff += Zi(j)**2*Ni(:,j)/(Ne)
 enddo
 
   do i = 1, nx 
@@ -169,7 +169,7 @@ enddo
     grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33)
     ! trapped particle fraction
     ft(i) = ftrap(epsk(i))
-    do j = 1, nis
+    do j = 1, nions
     ! logarithmic gradients
       grad_ln_ni(i,j) = gradNi(i,j)/(Ni(i,j) + 1.e-33)
     enddo  
@@ -187,7 +187,7 @@ enddo
   LneeNRL = 23.5 - 0.5*log(Ne/1e6) + 1.25*log(Te) - sqrt(1e-5 + (1.0/16.0)*(log(Te) - 2)**2)
 
   do p = 1, nx
-    do j = 1, nis
+    do j = 1, nions
       if ((Ti(p)*me/(mi(j))<Te(p)).and.(Te(p)<10*Zi(p)**2)) then
         LneiNRL(p,j) = 23 - 0.5*log(Zi**2*Ne(p)/1e6) + 1.5*log(Te(p))
       elseif ((Ti(p)*me/(mi(j))<10*Zi**2).and.(Te(p)>10*Zi(p)**2)) then
@@ -207,7 +207,7 @@ enddo
 
   enddo
 
-  do j = 1,nis
+  do j = 1,nions
     LniiNRL(:,j)     = 23. - log(Zi(j)*Zi(j)*sqrt(2*(Ni(:,j)/1e6)*Zi(j)**2)) + 1.5*log(Ti)
     LniimpNRL(;,j)   = 23. - log(Zi(j)*Za*sqrt((Ni(:,j)/1e6)*Zi(j)**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
   enddo 
@@ -219,77 +219,72 @@ enddo
   Te15 = Te**1.5
 
   Tauee     = (eps_pi_fac*sqrt(me)*Te15)/(Ne*LneeNRL)
-  do j=1,nis
+  do j=1,nions
     Tauei(:,j)     = (eps_pi_fac*sqrt(me)*Te15)/(Zi**2*Ni(:,j)*LneiNRL(:,j))
   enddo
   Taueimp   = (eps_pi_fac*sqrt(me)*Te15)/(Zi**2*Za**2*Na*LneimpNRL) !Why Zi
 
-  do j =1,nis
+  do j =1,nions
     Tauie(:,j)     = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(j)**2*Ne*LneiNRL(:,j))
     Tauii(:,j)     = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(j)**4*Ni(:,j)*LniiNRL(:,j))
     Tauiimp(:,j)   = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(j)**2*Za**2*Na*LniimpNRL(:,j))
   enddo
 
   Tauimpe   = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**2*Ne*LneimpNRL)
-  do j =1, nis
+  do j =1, nions
     Tauimpi(:,j)   = (eps_pi_fac*sqrt(ma)*Ti15)/(Zi(j)**2*Za**2*Ni(:,j)*LniimpNRL(:,j))
   enddo
   Tauimpimp = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**4*Na*LnimpimpNRL)
 
 
   ! impurity collision frequency
-  do j = 1,nis
+  do j = 1,nions
     L11impi(j) = 1.0/(sqrt(1.0 + Aa/Ai(j))*Tauimpi(:,j))
   enddo
 
   ! transit frequencies
   wee     = (2.0*q_e*Te/me)**0.5/(R0*qmag)
-  do j = 1,nis
+  do j = 1,nions
     wii(:,j)     = (2.0*q_e*Ti/mi(j))**0.5/(R0*qmag)
   enddo
   wimpimp = (2.0*q_e*Ti/ma)**0.5/(R0*qmag)
 
   ! collisionalities
   nuestar   = 1.0/((eps15 + 1.e-33)*wee*Tauee)
-  do j = 1,nis
+  do j = 1,nions
     nuistar(:,j)   = 1.0/((eps15 + 1.e-33)*wii(:,j)*Tauii(:,j))
   enddo
   nuimpstar = 1.0/((eps15 + 1.e-33)*wimpimp*Tauimpimp)
 
   wca    = q_e*Za*B0/ma ! impurity cyclotron frequency
-  do j=1,nis
+  do j=1,nions
     nuswca = L11impi(:,j)/wca ! ratio of impurity collision frequency to cyclotron frequency
   enddo
 
   ! fitted factors
   call facs(nx, Za, ft, f1, f2, f3, y1, y2, y3, y4, adps)
-  do j = 1,nis
+  do j = 1,nions
     g(:,j) = nuistar(:,j)*eps15 ! collisionality parameter
     mu_ie(:,j) = (96.0*sqrt2/125.0)*(1/Zi(j)**2)*sqrt(me/mi(j))*(Ti15/Te15) ! ion-electron heat exchange term (Fülöp-Helander PoP '01)
     alpha(:,j) = Na*Za**2/(Ni(:,j)*Zi(j)**2) ! impurity strength parameter
   enddo
 
   do i = 1, nx
-    do j=1,nis
+    do j=1,nions
       C0a(i,j) = C2(alpha(i,j), g(i,j), f1(i), f2(i), Aa, Ai(j))/(1 + f3(i)*mu_ie(i,j)*g(i,j)**2) ! coefficient of ion heat flux in impurity-ion friction
-      ki(i,j)  = ki_Redl(nuistar(i,j), ft(i), Zeff(i,j)) ! neoclassical ion flow coefficient
+      ki(i,j)  = ki_Redl(nuistar(i,j), ft(i), Zeff(i)) ! neoclassical ion flow coefficient
     enddo
   enddo
 
   rhoLimp2 = (2.0*q_e*Ti/ma)/wca**2 ! Impurity Larmor radius (squared)
 
   ! thermodynamic gradients (for asymmetry calculations)
-  do j =1,nis
+  do j =1,nions
     UU(:,j)  = -(Za/Zi(j))*(C0a(:,j) + ki(:,j))*grad_ln_Ti
     GG(:,j)  = grad_ln_na - (Za/Zi(j))*grad_ln_ni(:,j) + (1 + (Za/Zi(j))*(C0a(:,j) - 1))*grad_ln_Ti
   enddo
 
-  UUeff=0.0
-  GGeff=0.0
-  do j=1,nis
-    UUeff += UU(:,j) 
-    GGeff += GG(:,j) 
-  enddo
+
   !---------------------------------------------------------------------------
   !-----------------------  Poloidal asymmetry  ------------------------------
   !---------------------------------------------------------------------------
@@ -410,7 +405,7 @@ enddo
   Ha_PSs=0.0
   Va_PSs=0.0
   Vra_PSs=0.0
-  do j=1,nis
+  do j=1,nions
     Da_PS(:,j)   = adps*qmag**2*rhoLimp2*L11impi*(Cgeo_G/(2.0*eps2))
     !Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
     Ka_PS(:,j)   = (Za/Zi(j))*Da_PS(:,j)
@@ -431,7 +426,7 @@ enddo
   Ha_CLs=0.0
   Va_CLs=0.0
   Vra_CLs=0.0
-  do j=1,nis
+  do j=1,nions
     Da_CL(:,j)   = (2.0*eps2*Cgeo_Gcl/Cgeo_G)*Da_PS(:,j)/(2*qmag**2)
     Ka_CL(:,j)   = (Za/Zi(j))*Da_CL(:,j)
     Ha_CL(:,j)   = -(1.0 + (Za/Zi(j))*(C0a(:,j) - 1.0))*Da_CL(:,j)
@@ -456,7 +451,7 @@ enddo
   Ha_BPs=0.0
   Va_BPs=0.0
   Vra_BPs=0.0
-  do j=1,nis
+  do j=1,nions
     Da_BP = 1.5*q_e*Ti*(1.0/(1.0/K11a(:,j) + 1.0/K11i(:,j)))/(Za**2*q_e**2*FV**2*Na)
     Ka_BP = (Za/Zi(j))*Da_BP(:,j)
     Ha_BP = ((Za/Zi(j))*(K12i(:,j)/K11i(:,j) - 1.5) - (K12a(:,j)/K11a(:,j) - 1.5))*Da_BP(:,j)
@@ -482,12 +477,15 @@ enddo
   !Vra = Vra_PS + Vra_BP + Vra_CL
 
   ! total convective velocity
-  do j = 1,nis
+  Vconvs =0.0_rkind
+  Flux_imp = 0.0_rkind
+  do j = 1,nions
     Vconv = Ka(:,j)*grad_ln_ni(:,j)/amin + Ha(:,j)*grad_ln_Ti/amin !check 
-  
+    Vconvs += Vconv(:,j)
 
   ! Total surface-averaged flux
     Flux_imp(:,j) = -Da(:,j)*gradNa + Na*Vconv(:,j)
+    Flux_imps += Flux_imp(:,j)
   enddo
 
   return
@@ -666,15 +664,16 @@ subroutine asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai
   use constants, only: rkind
   implicit none
 
-  integer :: nx, nis
+  integer :: nx, nions
   real(rkind), dimension(nx) :: epsK, qmag, deltaM, Za
-  real(rkind), dimension(nx,nis) :: UU, GG, nuswca, dNH, dNV, Zi
+  real(rkind), dimension(nx,nions) :: UU, GG, nuswca, dNH, dNV, Zi
   real(rkind), dimension(nx) :: dminphia, dmajphia, xn
   real(rkind) :: Aa, invaspct
-  real(rkind), dimension(nis) :: Ai
-  real(rkind), dimension(nx,nis) :: dmin, dmaj
-  real(rkind), dimension(nx,nis) :: RR, UG, Ae, AGe, CD0, HH, QQ, FF, KK, CD, CDV
-  real(rkind), dimension(nx) :: RD, DD, num, cosa, sina, dmins, dmajs
+  real(rkind), dimension(nions) :: Ai
+  real(rkind), dimension(nx,nions) :: dmin, dmaj
+  real(rkind), dimension(nx,nions) :: RR, UG, Ae, AGe, CD0, HH, QQ, FF, KK
+   real(rkind), dimension(nx) :: S1, S2, S3
+  real(rkind), dimension(nx) :: CD, CDV, RD, DD, num, cosa, sina, dmin, dmaj
 
 
 
@@ -684,17 +683,17 @@ subroutine asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai
 
   UG = 1 + UU/GG
   !Ae = nuswca*qmag**2/(epsk + 1.e-33)
-  do j= 1,nis
+  do j= 1,nions
     Ae(:,j) = nuswca(:,j)*qmag**2/invaspct
   enddo
   AGe = Ae*GG
-  do j = 1,nis
+  do j = 1,nions
     CD0 = -(epsk + 1.e-33)/UG(:,j)
   enddo
   !HH = 1.0 + deltaM*CD0*RR/GG
-  HH = 1.0_rkind
+  !HH = 1.0_rkind
   !QQ = CD0*(dNV/(epsk + 1.e-33))*UU/GG
-  do j=1,nis
+  do j=1,nions
     QQ(:,j) = CD0(:,j)*(dNV(:,j)/(epsk + 1.e-33))*(UG(:,j)-1.0)
   
   !FF = CD0*(1-0.5*dNH/(epsk + 1.e-33)*UU/GG - deltaM*(RR/GG)/(epsk + 1.e-33))
@@ -703,61 +702,59 @@ subroutine asymmetry_an(nx, xn, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai
   enddo
   KK = 1.0_rkind
 
+  S1 = 0.0_rkind
+  S2 = 0.0_rkind
+  S3 = 0.0_rkind
 
-  do j= 1,nis
-    CD = FF - 0.5*(dminphia - deltaM)
-    CDV(:,j) = -0.5*(dmajphia + QQ(:,j))
-    RD(:,j) = sqrt((FF(:,j) + 0.5*(dminphia-deltaM))**2 + 0.25*(dmajphia - QQ(:,j))**2)
-    DD(:,j) = RD(:,j)**2 + AGe**2*(RD(:,j)/CD0(:,j))**2
+  do j = 1, nions
+    S1 += A(:,j)/CD0(:,j)
+    S2 += A(:,j)/CD0(:,j) * QQ(:,j) 
+    S3 += A(:,j)/CD0(:,j) * FF(:,j) 
+  enddo
 
-    num(:,j)  = ((AGe(:,j)/CD0(:,j))**2 - 1)*(FF(:,j)/(CD0(:,j)) + 0.5*(dminphia-deltaM)/CD0(:,j)) + &
+  CD = FF - 0.5*(dminphia - deltaM + S2)
+  CDV = -0.5*(dmajphia + S3)
+  RD = sqrt(CD**2 +CDV**2)
+  DD(:,j) = RD(:,j)**2 + AGe**2*(RD(:,j)/CD0(:,j))**2
+
+  num(:,j)  = ((AGe(:,j)/CD0(:,j))**2 - 1)*(FF(:,j)/(CD0(:,j)) + 0.5*(dminphia-deltaM)/CD0(:,j)) + &
           (AGe(:,j)/CD0(:,j))*(0.5*dNV(:,j)*(UG(:,j)-1.0)/(epsk + 1.e-33) - 0.5*dmajphia/CD0(:,j))
-    cosa(:,j) = RD(:,j)*CD0(:,j)*num(:,j)/DD(:,j)
+  cosa(:,j) = RD(:,j)*CD0(:,j)*num(:,j)/DD(:,j)
 
-    num(:,j)  = 2*AGe(:,j)*(FF(:,j)/CD0(:,j) + 0.5*(dminphia-deltaM)/CD0(:,j))+((AGe(:,j)/CD0(:,j))**2-1)*&
+  num(:,j)  = 2*AGe(:,j)*(FF(:,j)/CD0(:,j) + 0.5*(dminphia-deltaM)/CD0(:,j))+((AGe(:,j)/CD0(:,j))**2-1)*&
           (0.5*dmajphia - 0.5*dNV(:,j)*CD0(:,j)*(UG(:,j)-1.0)/((epsk + 1.e-33)))
-    sina(:,j) = RD(:,j)*num(:,j)/DD(:,j)
-  enddo
-  dmin = CD + RD*cosa
-  dmaj = CDV + RD*sina
+  sina(:,j) = RD(:,j)*num(:,j)/DD(:,j)
 
-  dmajs = 0.0_rkind
-  dmins = 0.0_rkind
 
-  do j = 1,nis
-    dmins += dmin
-    dmajs += dmajs
-  enddo
+
+dmin += dmin
+dmaj += dmajs
 
 
 end subroutine asymmetry_an
 
 !New subroutine for matrix calculation. 
 
-subroutine asymmetry_an_mat(nx, xn, UU, GG, epsk, J, F, invaspct, qmag, nuswca, deltaM, Ai, Aa, Zi, R0,B0 Za, &
+subroutine asymmetry_an_mat(nx, xn,nions, UU, GG, epsk, J, F, nuswca, deltaM, Aa, R0,B0 Za, &
                         dNH, dNV, dminphia, dmajphia, dmin_M, dmaj_M)
 
 !*******************************************************************************
-! Poloidal asymmetry of the impurity density distribution, analytical
-! calculation in circular geometry
+! Poloidal asymmetry of the impurity density distribution, analytical matrix solution
 !*******************************************************************************
 ! INPUTS:
 ! -------
 ! nx -------> size of radial arrays [-] {int}
+! nions ------> numer of ion species [-] {int}
 ! xn -------> radial grid [-] {arr, nx}
-! UU -------> thermodynamic gradient U [-] {arr, nx}
-! GG -------> thermodynamic gradient G [-] {arr, nx}
+! UU -------> thermodynamic gradient U [-] {arr, (nx,nions)}
+! GG -------> thermodynamic gradient G [-] {arr, (nx,nions)}
 ! epsK -----> local inverse aspect ratio [-] {arr, nx}
-! invaspct -> inverse aspect ratio [-] {float}
-! qmag -----> safety factor [-] {arr, nx}
 ! nuswca ---> ratio of impurity coll. freq. to cyclotron freq. [-] {arr, nx}
 ! deltaM ---> rotation strength parameter [-] {arr, nx}
-! Ai -------> main ion mass number [-] {float}
 ! Aa -------> impurity mass number [-] {float}
-! Zi -------> main ion charge number [-] {float}
 ! Za -------> impurity charge number [-] {arr, nx}
-! dNH ------> horizontal asymmetry of main ion density [-] {arr, nx}
-! dNV ------> vertical asymmetry of main ion density [-] {arr, nx}
+! dNH ------> horizontal asymmetry of main ion density [-] {arr, (nx,nions)}
+! dNV ------> vertical asymmetry of main ion density [-] {arr, (nx,nions)}
 ! dminphia -> horizontal asymmetry of electrostatic potential [-] {arr, nx}
 ! dmajphia -> vertical asymmetry of electrostatic potential [-] {arr, nx}
 !*******************************************************************************
@@ -770,28 +767,34 @@ subroutine asymmetry_an_mat(nx, xn, UU, GG, epsk, J, F, invaspct, qmag, nuswca, 
   use constants, only: rkind
   implicit none
 
-  integer :: nx, nis
-  real(rkind), dimension(nx) :: epsK, qmag, deltaM, Za, J,F
-  real(rkind), dimension(nx,nis) :: UU, GG, nuswca, dNH, dNV, Zi, A_M
-  real(rkind), dimension(nx) :: dminphia, dmajphia, xn
+  integer :: nx, nions
+  real(rkind), dimension(nx) :: epsK, deltaM, Za, J,F !check for F and J
+  real(rkind), dimension(nx,nions) :: UU, GG, nuswca, dNH, dNV, A_M
+  real(rkind), dimension(nx) :: dminphia, dmajphia, xn, detinv, S2, S3, S1
   real(rkind) :: Aa, invaspct, ma, R0, B0
-  real(rkind), dimension(nis) :: Ai
-  real(rkind), dimension(nx,nis) :: dmin_M, dmaj_M
+  real(rkind), dimension(nx) :: dmin_M, dmaj_M
   
   ma= Aa*mp
 
-  do j = 1,nis
+  S1 = 0.0_rkind
+  S2 = 0.0_rkind
+  S3 = 0.0_rkind
+  detinv = 0.0_rkind
+
+  do j = 1,nions
     A_M(:,j) = J*F*ma*nuswca(:,j)/(Za*q_e)
-  enddo 
-  detinv = 1/(1+A_M**2 *(GG+UU)**2)
+    detinv += 1/(1+A_M(:,j)**2 *(GG(:,j)+UU(:,j))**2) !determinant of the matrix 
+    S1 += A_M(:,j)*(GG(:,j)+UU(:,j))
+    S2 +=  A_M(:,j)*dNV(:,j)*UU(:,j)
+    S3 += 2*A_M(:,j)*epsK*GG(:,j) - dNH(:,j)*A(:,j)*UU(:,j)
+  enddo
 
-  fact= qmag/(xn*R0*B0)
+  !Calculation of the deltas
+  dmin_M = detinv*(deltaM-dminphia+S2 - S1*(-dmajphia+S3))
+  dmaj_M = detinv*(S1*(deltaM-dminphia+S2) -dmajphia+S3)
 
-  dmin_M = detinv*(A_M*de)
 
-
-
-end subroutine asymmetry_an
+end subroutine asymmetry_an_Mat
 
 
 
@@ -838,21 +841,24 @@ subroutine asymmetry_fg(nx, nth, theta, BV, RV, jacob, FV, dpsidx, Machi, L11imp
   use constants, only: rkind, mp, q_e, pi
   implicit none
 
-  integer :: nx, nth
+  integer :: nx, nth, nions
   real(rkind), dimension(nth) :: theta
-  real(rkind), dimension(nx) :: FV, dpsidx, Machi, L11impi, Za, UU, GG, Te, Ti, B2avg
-  real(rkind) :: R0, Ai, Aa, Zi
+  real(rkind), dimension(nx) :: FV, dpsidx, Machi, Za, Te, Ti, B2avg
+  real(rkind), dimension(nx,nions) :: UU, GG, L11impi
+  real(rkind) :: R0, Aa
+  real(rkind), dimension(nions) :: Zi, Ai
   real(rkind), dimension(nx, nth) :: BV, RV, jacob, PhiV, NV
   real(rkind), dimension(4) :: regulopt
 
-  real(rkind), dimension(nx) :: dmin, dmaj
+  real(rkind), dimension(nx,nions) :: dmin, dmaj
   real(rkind), dimension(nx, nth) :: nn
 
 
-  real(rkind), dimension(nx) :: asym_error, Factrot0
+  real(rkind), dimension(nx,nions) :: asym_error, Factrot0
   real(rkind), dimension(1:nth+1,1:nth+1) :: AAA, LL, CC, DD
   real(rkind), dimension(1:nth+1) :: BB, nnya
-  real(rkind), dimension(1:nth) :: Apsi, dum, nnx, nny, b2, nnp, TermGG, TermUU, FFF, GGG, HHH
+  real(rkind), dimension(1:nth,nions) :: Apsi, FFF, GGG, HHH
+  real(rkind), dimension(1:nth) :: dum, nnx, nny, b2, nnp, TermGG, TermUU
   real(rkind), dimension(size(AAA,1)) :: work  ! work array for LAPACK
   real(rkind)  :: b2snavg, nsb2avg, b2sNNavg, FactV
   !real(rkind)  :: TermUUneo, TermRRneo, TermRRneoa, TermRRneob, TermGGcl
@@ -880,13 +886,17 @@ subroutine asymmetry_fg(nx, nth, theta, BV, RV, jacob, FV, dpsidx, Machi, L11imp
   nn = 1.0_rkind
 
   do ix = 1,nx
+    do j= 1,nions
 
- 	Factrot0(ix) = (Aa/Ai)*(Machi(ix)/R0)**2
+ 	    Factrot0(ix,j) = (Aa/Ai(j))*(Machi(ix)/R0)**2
+    enddo
 
-	do it=1,nth
-	    b2(it) = BV(ix,it)**2/B2avg(ix)
-	    Apsi(it) = jacob(ix,it)*FV(ix)*(Aa*mp)*L11impi(ix)/(q_e*Za(ix))/((dpsidx(ix))**2+1.e-33)
-	enddo
+    do it=1,nth
+        b2(it) = BV(ix,it)**2/B2avg(ix)
+        do j = 1,nions
+          Apsi(it,j) = jacob(ix,it)*FV(ix)*(Aa*mp)*L11impi(ix,nions)/(q_e*Za(ix))/((dpsidx(ix))**2+1.e-33)
+        enddo
+    enddo
 
    	call fluxavgscal(nth, theta , b2/NV(ix,:), jacob(ix,:), b2sNNavg)
 
@@ -905,12 +915,13 @@ subroutine asymmetry_fg(nx, nth, theta, BV, RV, jacob, FV, dpsidx, Machi, L11imp
 
   		TermGG = 1. - b2/nnx/b2snavg
   		TermUU = b2/NV(ix,:) - b2sNNavg*b2/nnx/b2snavg
- 
-  		FFF  = Apsi*( GG(ix) + b2/NV(ix,:)*UU(ix) )
-  		GGG = -Za(ix)*Te(ix)/Ti(ix)*(PhiV(ix,:)-PhiV(ix,1)) + Factrot0(ix)*(RV(ix,:)**2-RV(ix,1)**2)
-  		HHH = Apsi*b2/b2snavg*(GG(ix) + b2sNNavg*UU(ix) )
+      do j= 1, nions
+        FFF  = Apsi(:,j)*( GG(ix,j) + b2/NV(ix,:)*UU(ix,j) )
+        GGG = -Za(ix)*Te(ix)/Ti(ix)*(PhiV(ix,:)-PhiV(ix,1)) + Factrot0(ix,j)*(RV(ix,:)**2-RV(ix,1)**2)
+        HHH = Apsi(:,j)*b2/b2snavg*(GG(ix,j) + b2sNNavg*UU(ix,j) )
+      enddo
 
-      ! AA*n = BB
+      ! AA*n = BB  CHECK
       ! Remplissage matrices AA, BB & LL
 
   		do it = 2,nth-1
@@ -1208,34 +1219,34 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
   use constants, only: rkind, mp, q_e, pi, sqrt2
   implicit none
 
-  integer :: nx,nis
-  real(rkind), dimension(nx,nis) :: ni, wii, Tauii, Tauimpi, Tauiimp
+  integer :: nx,nions
+  real(rkind), dimension(nx,nions) :: ni, wii, Tauii, Tauimpi, Tauiimp
   real(rkind), dimension(nx) :: nimp, Ti, wimpimp, Tauimpimp, eps2, qmag, ft
-  real(rkind), dimension(nis) :: Zi, Ai, mi
+  real(rkind), dimension(nions) :: Zi, Ai, mi
   real(rkind) ::  Aimp, R0, mimp
   !real(dp) :: Zimp
   real(rkind), dimension(nx) :: Zimp
-  real(rkind), dimension(nx,nis) :: K11a, K12a, K22a, K11i, K12i, K22i
+  real(rkind), dimension(nx,nions) :: K11a, K12a, K22a, K11i, K12i, K22i
   !real(dp) :: f1, f2, f3
   real(rkind), dimension(nx) :: y1, y2, y3, y4
 
   real(rkind), dimension(nx) :: fac_a_P, K11aP, K12aP, K22aP
-  real(rkind), dimension(nx,nis) :: fac_i_P, K11iP, K12iP, K22iP
+  real(rkind), dimension(nx,nions) :: fac_i_P, K11iP, K12iP, K22iP
   real(rkind) :: r00, r01, r11
-  real(rkind), dimension(nis) :: xai, xia, x2ai, x2ia, xfac_ai, xfac_ia
+  real(rkind), dimension(nions) :: xai, xia, x2ai, x2ia, xfac_ai, xfac_ia
   real(rkind) :: qaa00, qaa01, qaa11, qai00, qia00, qai01, qia01, qai11, qia11
-  real(rkind), dimension(nx,nis) :: fac_qai_PS, fac_qia_PS
-  real(rkind), dimension(nx,nis) :: qa00, qi00, qa01, qi01, qa11, qi11, Qa, Qi
-  real(rkind), dimension(nx,nis) :: la11, la12, la22, li11, li12, li22
+  real(rkind), dimension(nx,nions) :: fac_qai_PS, fac_qia_PS
+  real(rkind), dimension(nx,nions) :: qa00, qi00, qa01, qi01, qa11, qi11, Qa, Qi
+  real(rkind), dimension(nx,nions) :: la11, la12, la22, li11, li12, li22
   real(rkind), dimension(nx) :: fac_imp_PS 
-  real(rkind), dimension(nx,nis) :: fac_ion_PS
-  real(rkind), dimension(nx,nis) :: K11aPS, K12aPS, K22aPS, K11iPS, K12iPS, K22iPS
+  real(rkind), dimension(nx,nions) :: fac_ion_PS
+  real(rkind), dimension(nx,nions) :: K11aPS, K12aPS, K22aPS, K11iPS, K12iPS, K22iPS
   real(rkind), dimension(nx) :: fac_B
-  real(rkind), dimension(nx,nis) :: nuDai, nuD2ai, nuD4ai
-  real(rkind), dimension(nx,nis) :: nuDia, nuD2ia, nuD4ia
+  real(rkind), dimension(nx,nions) :: nuDai, nuD2ai, nuD4ai
+  real(rkind), dimension(nx,nions) :: nuDia, nuD2ia, nuD4ia
   real(rkind), dimension(nx) :: nuDaa, nuD2aa, nuD4aa
-  real(rkind), dimension(nx,nis) :: nuDii, nuD2ii, nuD4ii
-  real(rkind), dimension(nx,nis) :: K11aB, K12aB, K22aB, K11iB, K12iB, K22iB
+  real(rkind), dimension(nx,nions) :: nuDii, nuD2ii, nuD4ii
+  real(rkind), dimension(nx,nions) :: K11aB, K12aB, K22aB, K11iB, K12iB, K22iB
 
 
   mimp = Aimp*mp
@@ -1245,7 +1256,7 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
   ! Plateau regime
 
   fac_a_P = nimp*(q_e*Ti)*SQRT(pi)/(3.0*wimpimp)
-  do j = i,nis
+  do j = i,nions
   fac_i_P(:,j) = ni(:,j)*(q_e*Ti)*SQRT(pi)/(3.0*wii(:,j))
   enddo
 
@@ -1285,12 +1296,12 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
   qai11 = (35.0*x2ai**3 + 38.5*x2ai**2 + 46.25*x2ai + 12.75)/xfac_ai**7
   qia11 = (35.0*x2ia**3 + 38.5*x2ia**2 + 46.25*x2ia + 12.75)/xfac_ia**7
 
-  do j= 1,nis
+  do j= 1,nions
     fac_qai_PS(:,j) = (ni(:,j)*Zi(j)**2/(nimp*Zimp**2))
     fac_qia_PS(:,j) = (nimp*Zimp**2/(ni(:,j)*Zi(j)**2))
   enddo
 
-  do j=1,nis
+  do j=1,nions
     qa00(:,j) = fac_qai_PS(:,j)*qai00 +  qaa00 - r00
     qi00(:,j) = fac_qia_PS(:,j)*qia00 + qaa00 - r00
 
@@ -1314,11 +1325,11 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
   li22 = 12.25*(qi11+qi00 + 2.0*qi01)/Qi
 
   fac_imp_PS = nimp*(q_e*Ti)*Tauimpimp
-  do j= 1,nis
+  do j= 1,nions
     fac_ion_PS(:,j) = ni(:,j)*(q_e*Ti)*Tauii(:,j)
   enddo
 
-  do j=1,nis
+  do j=1,nions
     K11aPS(:,j) = fac_imp_PS*la11(:,j)
     K12aPS(:,j) = fac_imp_PS*la12(:,j)
     K22aPS(:,j) = fac_imp_PS*la22(:,j)
@@ -1336,7 +1347,7 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
 
   ! Maxwellian integrals
 
-  do j = 1,nis
+  do j = 1,nions
     nuDai(:,j)  = (xfac_ai + x2ai*LOG(xai/(1 + xfac_ai)))/Tauimpi(:,j)
     nuD2ai(:,j) = 1.0/(xfac_ai*Tauimpi(:,j))
     nuD4ai(:,j) = 2.0*(1.0 + 1.25*x2ai)/(xfac_ai**3*Tauimpi(:,j))
@@ -1356,7 +1367,7 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
 
   ! Banana regime viscosity coefficient
 
-  do j=1,nis
+  do j=1,nions
     K11aB(:,j) = fac_B*nimp*mimp*(nuDai(:,j) + nuDaa)
     K12aB(:,j) = fac_B*nimp*mimp*(nuD2ai(:,j) + nuD2aa)
     K22aB(:,j) = fac_B*nimp*mimp*(nuD4ai(:,j) + nuD4aa)
@@ -1367,7 +1378,7 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
   enddo
 
   ! total viscosity coefficients, rational approximation for interpolation
-  do j= 1,nis 
+  do j= 1,nions 
   K11a(:,j) = y1*K11aB(:,j)/((1.0 + y1*K11aB(:,j)/(K11aP))*(1.0 + K11aP/(K11aPS(:,j))))
   K12a(:,j) = K12aB(:,j)/((1.0 + K12aB(:,j)/(y2*K12aP))*(1.0 + y2*K12aP/(y3*K12aPS(:,j))))
   K22a(:,j) = K22aB(:,j)/((1.0 + K22aB(:,j)/(K22aP))*(1.0 + K22aP/(K22aPS(:,j))))
@@ -1380,5 +1391,7 @@ subroutine K_VISC(nx, ni, nimp, Ti, wii, wimpimp, Zi, Zimp, Ai, Aimp, Tauii, &
 
   return
 end subroutine K_VISC
+
+
 
 
