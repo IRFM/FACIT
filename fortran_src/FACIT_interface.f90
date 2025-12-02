@@ -2,7 +2,7 @@ program FACIT_interface
 use constants
 IMPLICIT NONE
 
-integer           :: i, k, nx, nth, nions, nvar, iref
+integer           :: i, j, k, nx, nth, nions, nvar, iref
 real(rkind), allocatable, dimension(:)  :: RHON, TE, TI, NE, Na, QPSI, Machi, TperpsTpar, FV, dpsidx
 real(rkind), allocatable, dimension(:,:)  ::NI
 real(rkind), allocatable, dimension(:,:)  :: AsymPhi
@@ -16,7 +16,7 @@ real(rkind), allocatable, dimension(:)  :: dmin, dmaj
 real(rkind), allocatable, dimension(:,:) :: Ai, Zi
 real(rkind)    ::  Aa, Za_axis
 real(rkind)   :: tau, B0, R0, invaspect, Te0, qa, tedge, nedge, cimp
-real(rkind),  dimension(:,:) :: Ni0
+!real(rkind),  dimension(:,:) :: Ni0
 real(rkind)   :: fH, bC, Zeff, sigH, TperpsTpar_axis, Machi_axis
 real(rkind)  :: time1, time2, xref, amin, nsigH, solution
 real(rkind), dimension(7):: DUMMY
@@ -25,8 +25,8 @@ logical  :: pol_asym, rotation, full_geom
      ! OUTPUTS
 
       real(rkind), allocatable, dimension(:) :: Flux_imp, Da, Vconv ! main outputs: flux, transport coefficients and poloidal asymmetry
-      real(rkind), allocatable, dimension(:) ::  Da_M, Vconv_M
-      real(rkind), dimension(:,:) :: Da_BP_M, Da_PS_M, Da_CL_M, Ka_BP_M, Ka_PS_M, Ka_CL_M, Ha_BP_M, Ha_PS_M, Ha_CL_M, Va_BP_M, Va_PS_M, Va_CL_M
+      real(rkind), allocatable, dimension(:,:) ::  Da_M, Vconv_M
+      real(rkind), allocatable, dimension(:,:) :: Da_BP_M, Da_PS_M, Da_CL_M, Ka_BP_M, Ka_PS_M, Ka_CL_M, Ha_BP_M, Ha_PS_M, Ha_CL_M, Va_BP_M, Va_PS_M, Va_CL_M
       real(rkind), allocatable, dimension(:) :: Da_PS, Da_BP, Da_CL, Ka_PS, Ka_BP, Ka_CL, Ha_PS, Ha_BP, Ha_CL, Va_PS,Va_BP, Va_CL    ! supplementary outputs: PS, BP, CL & centrifugal components
 
  open(10,file='facit_input.dat',status='OLD')
@@ -123,4 +123,3 @@ logical  :: pol_asym, rotation, full_geom
  deallocate(Da_PS, Da_BP, Da_CL, Ka_PS, Ka_BP, Ka_CL, Ha_PS, Ha_BP, Ha_CL,Va_PS,Va_BP, Va_CL)
 
 end
-
