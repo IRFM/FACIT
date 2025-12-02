@@ -37,7 +37,7 @@ subroutine FACIT(nx, nth, xn,nions, theta, &                                ! gr
 ! ------------
 ! nx --------> size of radial arrays [-] {int}
 ! nth -------> size of poloidal arrays [-] {int}
-!nis --------> number of ion species [-] {int}
+! nions --------> number of ion species [-] {int}
 ! xn --------> radial coordinate [-] {arr, nx}
 ! theta -----> poloidal coordinate [-] {arr, nth}
 ! Za --------> impurity charge number [-] {arr, nx}
@@ -66,6 +66,7 @@ subroutine FACIT(nx, nth, xn,nions, theta, &                                ! gr
 ! AsymN -----> poloidal asymmetry of main ion density [-] {arr, (nx,2)}
 ! pol_asym --> poloidally symmetric (False) or asymmetric (True) system {boolean}
 ! full_geom -> analytical (False) or iterative (True) geometry {boolean}
+! solution ---> 
 ! rotation --> consider toroidal rotation {boolean}
 ! regulopt --> options for iterative calculations [-] {arr, 4}
 !*******************************************************************************
@@ -93,14 +94,13 @@ subroutine FACIT(nx, nth, xn,nions, theta, &                                ! gr
   integer :: nx, nth, nions
   real(rkind), dimension(nth) :: theta
   real(rkind), dimension(nx)  :: Te, Ti, gradTi, Ne, gradNa
-  real(rkind), dimension(nx,nions)  :: Ni, gradNi
+  real(rkind), dimension(nx,nions) :: Ni, gradNi
   real(rkind), dimension(nx)  :: qmag, xn, dpsidx, FV, Za
-  real(rkind), dimension(nx)  :: Machi !check
-  real(rkind) :: B0, R0, invaspct, Aa
+  real(rkind), dimension(nx) :: Machi !check
+  real(rkind), intent(in) :: B0, R0, invaspct, Aa
   real(rkind), dimension(nions)  :: Ai
-  real(rkind), dimension(nx,nions)  :: Zi
+  real(rkind), dimension(nx,nions) :: Zi
   real(rkind), dimension(nx,nth) :: jacob, BV, RV, PhiV
-  real(rkind), dimension(nx,nth,nions) :: NV
   real(rkind), dimension(nx,2) :: AsymPhi
   real(rkind), dimension(nx,nions, 2) :: AsymN
   real(rkind), dimension(4) :: regulopt
@@ -108,11 +108,11 @@ subroutine FACIT(nx, nth, xn,nions, theta, &                                ! gr
   integer :: solution
 
   ! OUTPUTS
-  real(rkind), dimension(nx,nions) :: Da, Vconv_M, dmin, dmaj
-  real(rkind), dimension(nx) ::  Das, Vconv, Flux_imp
+  real(rkind), dimension(nx) :: Da, Vconv, dmin, dmaj, Flux_imp
+  real(rkind), dimension(nx,nions) ::  Da_M, Vconv_M
   real(rkind), dimension(nx, nth) :: nn
   real(rkind), dimension(nx,nions) :: Da_BP_M, Da_PS_M, Da_CL_M, Ka_BP_M, Ka_PS_M, Ka_CL_M, Ha_BP_M, Ha_PS_M, Ha_CL_M, Va_BP_M, Va_PS_M, Va_CL_M
-  real(rkind), dimension(nx) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CLs, Ha_BP, Ha_PS, Ha_CLs, Va_BP, Va_PS, Va_CL
+  real(rkind), dimension(nx) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CL, Ha_BP, Ha_PS, Ha_CL, Va_BP, Va_PS, Va_CL
 
   ! OTHER
   integer :: i,j, p, n, it, ix!, info, ierr, ierrmax
@@ -358,6 +358,7 @@ enddo
     if (pol_asym) then
 
       !asymmetries of ES potential and main ion density
+      
       dminphia = Za*(Te/Ti)*AsymPhi(:,1)
       dmajphia = Za*(Te/Ti)*AsymPhi(:,2)
       dNH = AsymN(:,:,1)
@@ -517,9 +518,9 @@ enddo
   Ka_M = Ka_PS_M + Ka_BP_M + Ka_CL_M
   Ha_M = Ha_PS_M + Ha_BP_M + Ha_CL_M
 
-  Das = Da_PS + Da_BP + Da_CL ! total diffusion coefficient
-  Kas = Ka_PS + Ka_BP + Ka_CL
-  Has = Ha_PS + Ha_BP + Ha_CL
+  Da = Da_PS + Da_BP + Da_CL ! total diffusion coefficient
+  Ka = Ka_PS + Ka_BP + Ka_CL
+  Ha = Ha_PS + Ha_BP + Ha_CL
 
   !Vra = Vra_PS + Vra_BP + Vra_CL
 
