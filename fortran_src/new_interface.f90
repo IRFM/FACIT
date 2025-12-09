@@ -57,7 +57,7 @@ program facit_try
     allocate(Ai(nions))
     allocate(Zi(nx,nions))
     allocate(jacob(nx,nth), BV(nx,nth),RV(nx,nth))
-    allocate(AsymPhi(nx,nth))
+    allocate(AsymPhi(nx,2))
     allocate(AsymN(nx,nions,2))
     allocate(regulopt(4))
     allocate(Da(nx), Vconv(nx), dmin(nx), dmaj(nx), Flux_imp(nx))
@@ -143,7 +143,8 @@ program facit_try
     Omega = Za * q_e * B0/(Aa *mp ) 
     
     ! Mach number squared (simplified)
-    Machi2 = (ma*Na + S1)* R0**2 *Omega/(S2*2.0_rkind*Ti)
+    !Machi2 = (ma*Na + S1)* R0**2 *Omega/(S2*2.0_rkind*Ti)
+    Machi2 = 0.5
 
     ! Calculate dpsidx (derivative of poloidal flux with respect to radial coordinate)
     do i = 1, nx
@@ -240,3 +241,4 @@ program facit_try
     deallocate(S1, S2, Omega)
 
 end program facit_try
+
