@@ -1,0 +1,6 @@
+ifx -g -c constants.f90 -o constants.o
+ifx -g -c facit.f90 -o facit.o -llapack
+ifx -g -c facit_try.f90 -o facit_try.o
+
+
+ifx -g facit.o facit_try.o constants.o -o facit_try -llapack
