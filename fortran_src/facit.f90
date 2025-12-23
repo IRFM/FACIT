@@ -176,17 +176,13 @@ module facit_mod
 !        dpsidx = amin**2*B0*xn/qmag
 !      endif
 
-      Zeff= Za**2 *Na/(Ne)
 
-      do j = 1,nions
-        Zeff = Zeff +  Zi(:,j)**2 *Ni(:,j)/(Ne)
-      enddo
-
+      Zeff = (Za**2*Na +  Zi(:,1)**2 *Ni(:,1))/(Ne)
       do i = 1, nx 
         grad_ln_na(i) = gradNa(i)/(Na(i) + 1.e-33)
         grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33)
         ! trapped particle fraction
-        ft(i) = 1. - (1. - epsK(i))**2/(sqrt(1. - epsK(i)**2)*(1+1.46*sqrt(epsK(i))))
+        ft(i) = 1. - (1. - epsk(i))**2/(sqrt(1. - epsk(i)**2)*(1+1.46*sqrt(epsk(i))))
         do j = 1, nions
         ! logarithmic gradients
           grad_ln_ni(i,j) = gradNi(i,j)/(Ni(i,j) + 1.e-33)
@@ -204,7 +200,11 @@ module facit_mod
         meff = meff + Ni(:,j)*Ai(j) *mp 
       enddo
 
-      deltaM = epsk * (2*Machi - meff/Na * R0**2 *q_e*Za*B0/ma * 1/Ti)
+      if (nions > 1) then
+        deltaM = 0
+      else 
+        deltaM = 2*(Aa/Ai(1))*Machi**2*epsk
+      endif
 
       !not done
 
@@ -385,7 +385,7 @@ module facit_mod
           dNH = AsymN(:,:,1)
           dNV = AsymN(:,:,2)
 
-          call asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai, Aa, Za, &
+          call asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Aa, Za, &
                             dNH, dNV, dminphia, dmajphia, dmin, dmaj)
 
           do i = 1, nx
@@ -672,9 +672,7 @@ module facit_mod
 
 
 
-
-
-    subroutine asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai, Aa, Za, &
+subroutine asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai, Aa, Za, &
                             dNH, dNV, dminphia, dmajphia, dmin, dmaj)
 
     !*******************************************************************************
@@ -716,9 +714,10 @@ module facit_mod
       real(rkind), dimension(nx), intent(in) :: dminphia, dmajphia, xn
       real(rkind), intent(in) :: Aa, invaspct
       real(rkind), dimension(nions), intent(in) :: Ai
-      real(rkind), dimension(nx,nions) ::  UG, Ae, AGe, CD0, QQ, FF
+      real(rkind), dimension(nx,nions) :: A_M
+      real(rkind), dimension(nx) ::  UG, AGe, CD0, QQ, FF
       !real(rkind), dimension(nx) :: RR,  HH, KK
-      real(rkind), dimension(nx) :: CD, CDV, RD, DD, num, cosa, sina,S1,S2,S3
+      real(rkind), dimension(nx) :: CD, CDV, RD, DD, num, cosa, sina,S1,S2,S3,S4
       real(rkind), dimension(nx), intent(out) :: dmin, dmaj
       integer :: j
 
@@ -727,45 +726,48 @@ module facit_mod
       !RR = 0.5*(1-(Ai*Za)/(Aa*Zi))/(epsk + 1.e-33)
       !RR = 0.5*(1-Ai*Za/(Aa*Zi))/(xn+1.e-33)
       !RR = 0.0_rkind
+	
+	do j= 1,nions
+          A_M(:,j) = nuswca(:,j)*qmag**2/(invaspct*(epsk + 1.e-33))
+      enddo
 
-      UG = 1 + UU/GG
+	S1 = 0.0_rkind
+      S2 = 0.0_rkind
+      S3 = 0.0_rkind
+	S4 = 0.0_rkind
+
+      do j = 1, nions
+        S1 = S1 + A_M(:,j)*GG(:,j)
+        S2 = S2 + A_M(:,j)*UU(:,j)
+        S3 = S3 + A_M(:,j)*UU(:,j)*dNV(:,j)
+	  S4 = S4 + A_M(:,j)*UU(:,j)*dNH(:,j)
+      enddo
+
+      !UG = 1 + UU/GG
       !Ae = nuswca*qmag**2/(epsk + 1.e-33)
-      do j= 1,nions
-        Ae(:,j) = nuswca(:,j)*qmag**2/invaspct
-      enddo
-      AGe = Ae*GG
-      do j = 1,nions
-        CD0(:,j) = -(epsk + 1.e-33)/UG(:,j)
-      enddo
+      !do j= 1,nions
+      !  Ae(:,j) = nuswca(:,j)*qmag**2/invaspct
+      !enddo
+      !AGe = Ae*GG
+      CD0 = -(epsk + 1.e-33)/(1+S2/S1)
+      
       !HH = 1.0 + deltaM*CD0*RR/GG
       !HH = 1.0_rkind
       !QQ = CD0*(dNV/(epsk + 1.e-33))*UU/GG
-      do j=1,nions
-        QQ(:,j) = CD0(:,j)*(dNV(:,j)/(epsk + 1.e-33))*(UG(:,j)-1.0)
-      
+      QQ = CD0/(epsk + 1.e-33) * S3/S1
       !FF = CD0*(1-0.5*dNH/(epsk + 1.e-33)*UU/GG - deltaM*(RR/GG)/(epsk + 1.e-33))
       !FF = CD0*(1-0.5*dNH*(UG-1.0)/(epsk + 1.e-33) - deltaM*(RR/GG)/(epsk + 1.e-33))
-        FF(:,j) = CD0(:,j)*(1-0.5*dNH(:,j)*(UG(:,j)-1.0)/(epsk + 1.e-33) )
-      enddo
+      FF = CD0*(-1+0.5*1/(epsk + 1.e-33) * S4/S1)
       !KK = 1.0_rkind
 
-      S1 = 0.0_rkind
-      S2 = 0.0_rkind
-      S3 = 0.0_rkind
 
-      do j = 1, nions
-        S1 = S1 + Ae(:,j)/CD0(:,j)
-        S2 = S2 + Ae(:,j)/CD0(:,j) * QQ(:,j) 
-        S3 = S3 + Ae(:,j)/CD0(:,j) * FF(:,j) 
-      enddo
-
-      CD = 0.5*(deltaM - dminphia + S2)
-      CDV = -0.5*(dmajphia + S3)
+      CD = 0.5*(-dminphia+deltaM+ ((epsk + 1.e-33)/CD0 * QQ))
+      CDV = -0.5*(dmajphia + 2*((epsk + 1.e-33)/CD0 * FF))
       RD = sqrt(CD**2 +CDV**2)
-      DD = RD*(1 +S1**2)
+      DD = RD**2 *(1 +((epsk + 1.e-33)/CD0)**2)
 
-      cosa = 1/DD * (deltaM - dminphia- CD + CDV + S2 - S1*(2*S3-CD-dmajphia-CDV))
-      sina = 1/DD * ( 2*S3-CD-dmajphia-CDV + S1*(deltaM - dminphia- CD + CDV + S2))
+      cosa = RD/DD * (deltaM - dminphia- CD + ((epsk + 1.e-33)/CD0)*(CDV + QQ) -(epsk + 1.e-33)/CD0 *(((epsk + 1.e-33)/CD0*(CD+2*FF))+CDV+dmajphia))
+      sina = RD/DD * (((epsk + 1.e-33)/CD0*(CD+2*FF))-CDV-dmajphia -(epsk + 1.e-33)/CD0*( deltaM - dminphia- CD + ((epsk + 1.e-33)/CD0)*(CDV + QQ) ) )
 
 
       dmin = CD + RD*cosa
@@ -775,72 +777,71 @@ module facit_mod
 
     end subroutine asymmetry_an
 
+
+
     !New subroutine for matrix calculation. 
 
     subroutine asymmetry_an_mat(nx, nions, Aa, nuswca, qmag, invaspct, GG, UU,dNH,dNV,epsK, dminphia, dmajphia ,deltaM, dmin, dmaj) !done :)
 
-    !*******************************************************************************
-    ! Poloidal asymmetry of the impurity density distribution, analytical matrix solution
-    !*******************************************************************************
-    ! INPUTS:
-    ! -------
-    ! nx -------> size of radial arrays [-] {int}
-    ! nis ------> numer of ion species [-] {int}
-    ! UU -------> thermodynamic gradient U [-] {arr, (nx,nis)}
-    ! GG -------> thermodynamic gradient G [-] {arr, (nx,nis)}
-    ! epsK -----> local inverse aspect ratio [-] {arr, nx}
-    ! deltaM ---> rotation strength parameter [-] {arr, nx}
-    ! Aa -------> impurity mass number [-] {float}
-    ! Za -------> impurity charge number [-] {arr, nx}
-    ! dNH ------> horizontal asymmetry of main ion density [-] {arr, nx}
-    ! dNV ------> vertical asymmetry of main ion density [-] {arr, nx}
-    ! dminphia -> horizontal asymmetry of electrostatic potential [-] {arr, nx}
-    ! dmajphia -> vertical asymmetry of electrostatic potential [-] {arr, nx}
-    ! detinv ----> Matrix determinant [-] {arr, nx}
-    !*******************************************************************************
-    ! OUTPUTS:
-    ! --------
-    ! dmin -----> horizontal asymmetry of impurity density Matrix solution [-] {arr, (nx,nis)}
-    ! dmaj -----> vertical asymmetry of impurity density Matrix solution [-] {arr, (nx,nis)}
-    !*******************************************************************************
+      !*******************************************************************************
+      ! Poloidal asymmetry of the impurity density distribution, analytical matrix solution
+      !*******************************************************************************
+      ! INPUTS:
+      ! -------
+      ! nx -------> size of radial arrays [-] {int}
+      ! nis ------> numer of ion species [-] {int}
+      ! UU -------> thermodynamic gradient U [-] {arr, (nx,nis)}
+      ! GG -------> thermodynamic gradient G [-] {arr, (nx,nis)}
+      ! epsK -----> local inverse aspect ratio [-] {arr, nx}
+      ! deltaM ---> rotation strength parameter [-] {arr, nx}
+      ! Aa -------> impurity mass number [-] {float}
+      ! Za -------> impurity charge number [-] {arr, nx}
+      ! dNH ------> horizontal asymmetry of main ion density [-] {arr, nx}
+      ! dNV ------> vertical asymmetry of main ion density [-] {arr, nx}
+      ! dminphia -> horizontal asymmetry of electrostatic potential [-] {arr, nx}
+      ! dmajphia -> vertical asymmetry of electrostatic potential [-] {arr, nx}
+      ! detinv ----> Matrix determinant [-] {arr, nx}
+      !*******************************************************************************
+      ! OUTPUTS:
+      ! --------
+      ! dmin -----> horizontal asymmetry of impurity density Matrix solution [-] {arr, (nx,nis)}
+      ! dmaj -----> vertical asymmetry of impurity density Matrix solution [-] {arr, (nx,nis)}
+      !*******************************************************************************
 
-      use constants, only: rkind, mp, q_e, pi
-      implicit none
+        use constants, only: rkind, mp, q_e, pi
+        implicit none
 
-      integer, intent(in) :: nx, nions
-      real(rkind), dimension(nx), intent(in) :: epsK, deltaM, qmag
-      real(rkind), dimension(nx,nions), intent(in) :: nuswca, UU, GG, dNH, dNV
-      real(rkind), dimension(nx), intent(in) :: dminphia, dmajphia 
-      real(rkind), intent(in)  :: invaspct
-      real(rkind), intent(in)  :: Aa
-      real(rkind), dimension(nx), intent(out) :: dmin, dmaj
-      real(rkind), dimension(nx) :: S2, S3, S1, detinv
-      real(rkind), dimension(nx,nions) :: A_M
-      real(rkind) :: ma
-      integer :: j
-      
-      ma= Aa*mp
+        integer, intent(in) :: nx, nions
+        real(rkind), dimension(nx), intent(in) :: epsK, deltaM, qmag
+        real(rkind), dimension(nx,nions), intent(in) :: nuswca, UU, GG, dNH, dNV
+        real(rkind), dimension(nx), intent(in) :: dminphia, dmajphia 
+        real(rkind), intent(in)  :: invaspct
+        real(rkind), intent(in)  :: Aa
+        real(rkind), dimension(nx), intent(out) :: dmin, dmaj
+        real(rkind), dimension(nx) :: S2, S3, S1, detinv
+        real(rkind), dimension(nx,nions) :: A_M
+        real(rkind) :: ma
+        integer :: j
+        
+        ma= Aa*mp
 
-      S1 = 0.0_rkind
-      S2 = 0.0_rkind
-      S3 = 0.0_rkind
+        S1 = 0.0_rkind
+        S2 = 0.0_rkind
+        S3 = 0.0_rkind
 
-      do j= 1,nions
-        A_M(:,j) = nuswca(:,j)*qmag**2/invaspct
-      enddo
-      
+        
 
-      do j = 1,nions
-        S1 = S1 + A_M(:,j)*(GG(:,j)+UU(:,j))
-        S2 = S2 + A_M(:,j)*dNV(:,j)*UU(:,j)
-        S3 = S3 + 2*A_M(:,j)*epsK*GG(:,j) - dNH(:,j)*A_M(:,j)*UU(:,j)
-      enddo
+        do j = 1,nions
+          S1 = S1 + A_M(:,j)*(GG(:,j)+UU(:,j))
+          S2 = S2 + A_M(:,j)*dNV(:,j)*UU(:,j)
+          S3 = S3 + A_M(:,j)*(2*epsK*GG(:,j) - dNH(:,j)*UU(:,j))
+        enddo
 
-      detinv = 1 + S1**2  !determinant of the matrix 
+        detinv = 1/(1 + S1**2)  !determinant of the matrix 
 
-      !Calculation of the deltas
-      dmin = detinv*(deltaM-dminphia+S2 - S1*(-dmajphia+S3))
-      dmaj = detinv*(S1*(deltaM-dminphia+S2) -dmajphia+S3)
+        !Calculation of the deltas
+        dmin = detinv*(deltaM-dminphia+S2 - S1*(-dmajphia+S3))
+        dmaj = detinv*(S1*(deltaM-dminphia+S2) -dmajphia+S3)
 
 
     end subroutine asymmetry_an_mat
@@ -851,235 +852,235 @@ module facit_mod
     subroutine asymmetry_fg(nx, nth,nions, theta, BV, RV, jacob, FV, dpsidx, Machi, L11impi, &
                             R0, Ai, Aa, Zi, Za, B2avg, UU, GG, PhiV, NV, Te, Ti, regulopt, &
                             dmin, dmaj, nn)  
-    !*******************************************************************************
-    ! Poloidal asymmetry of the impurity density distribution, iterative
-    ! calculation in full geometry
-    !*******************************************************************************
-    ! INPUTS:
-    ! -------
-    ! nx -------> size of radial arrays [-] {int}
-    ! nth ------> size of poloidal arrays [-] {int}
-    ! theta ----> poloidal grid [-] {arr, nth}
-    ! BV -------> magnetic field [T] {arr, (nx,nth)}
-    ! RV -------> major radius [m] {arr, (nx,nth)}
-    ! jacob ----> Jacobian of the coordinate system [m/T] {arr, (nx,nth)}
-    ! FV -------> poloidal current flux function [T*m] {arr, nx}
-    ! dpsidx ---> radial derivative of poloidal flux [V*s/-] {arr, nx}
-    ! Machi ----> Mach number of main ion [-] {arr, nx}
-    ! L11impi --> impurity - main ion collision frequency [1/s] {arr, nx}
-    ! R0 -------> major radius at magnetic axis [m] {float}
-    ! Ai -------> main ion mass number [-] {float}
-    ! Aa -------> impurity mass number [-] {float}
-    ! Zi -------> main ion charge number [-] {float}
-    ! Za -------> impurity charge number [-] {arr, nx}
-    ! B2avg ----> FSA of magnetic field squared <BV**2> [T^2] {arr, nx}
-    ! UU -------> thermodynamic gradient U [-] {arr, nx}
-    ! GG -------> thermodynamic gradient G [-] {arr, nx}
-    ! PhiV -----> poloidal asymmetry of electrostatic potential [-] {arr, (nx,nth)}
-    ! NV -------> poloidal asymmetry of main ion density [-] {arr, (nx,nth)}
-    ! Te -------> electron temperature [eV] {arr, nx}
-    ! Ti -------> main ion temperature [eV] {arr, nx}
-    ! regulopt -> options for iterative calculations [-] {arr, 4}
-    !*******************************************************************************
-    ! OUTPUTS:
-    ! --------
-    ! dmin -----> horizontal asymmetry of impurity density [-] {arr, nx}
-    ! dmaj -----> vertical asymmetry of impurity density [-] {arr, nx}
-    ! nn -------> poloidal asymmetry of the impurity density Na/<Na> [-] {arr, (nx,nth)}
-    !*******************************************************************************
+      !*******************************************************************************
+      ! Poloidal asymmetry of the impurity density distribution, iterative
+      ! calculation in full geometry
+      !*******************************************************************************
+      ! INPUTS:
+      ! -------
+      ! nx -------> size of radial arrays [-] {int}
+      ! nth ------> size of poloidal arrays [-] {int}
+      ! theta ----> poloidal grid [-] {arr, nth}
+      ! BV -------> magnetic field [T] {arr, (nx,nth)}
+      ! RV -------> major radius [m] {arr, (nx,nth)}
+      ! jacob ----> Jacobian of the coordinate system [m/T] {arr, (nx,nth)}
+      ! FV -------> poloidal current flux function [T*m] {arr, nx}
+      ! dpsidx ---> radial derivative of poloidal flux [V*s/-] {arr, nx}
+      ! Machi ----> Mach number of main ion [-] {arr, nx}
+      ! L11impi --> impurity - main ion collision frequency [1/s] {arr, nx}
+      ! R0 -------> major radius at magnetic axis [m] {float}
+      ! Ai -------> main ion mass number [-] {float}
+      ! Aa -------> impurity mass number [-] {float}
+      ! Zi -------> main ion charge number [-] {float}
+      ! Za -------> impurity charge number [-] {arr, nx}
+      ! B2avg ----> FSA of magnetic field squared <BV**2> [T^2] {arr, nx}
+      ! UU -------> thermodynamic gradient U [-] {arr, nx}
+      ! GG -------> thermodynamic gradient G [-] {arr, nx}
+      ! PhiV -----> poloidal asymmetry of electrostatic potential [-] {arr, (nx,nth)}
+      ! NV -------> poloidal asymmetry of main ion density [-] {arr, (nx,nth)}
+      ! Te -------> electron temperature [eV] {arr, nx}
+      ! Ti -------> main ion temperature [eV] {arr, nx}
+      ! regulopt -> options for iterative calculations [-] {arr, 4}
+      !*******************************************************************************
+      ! OUTPUTS:
+      ! --------
+      ! dmin -----> horizontal asymmetry of impurity density [-] {arr, nx}
+      ! dmaj -----> vertical asymmetry of impurity density [-] {arr, nx}
+      ! nn -------> poloidal asymmetry of the impurity density Na/<Na> [-] {arr, (nx,nth)}
+      !*******************************************************************************
 
-      use constants, only: rkind, mp, q_e, pi
-      implicit none
+        use constants, only: rkind, mp, q_e, pi
+        implicit none
 
-      integer :: nx, nth,nions
-      real(rkind), dimension(nth) :: theta
-      real(rkind), dimension(nx) :: FV, dpsidx, Machi, Za, Te, Ti, B2avg
-      real(rkind), dimension(nx,nions) :: L11impi, UU, GG
-      real(rkind) :: R0, Aa
-      real(rkind), dimension(nions) :: Ai, Zi
-      real(rkind), dimension(nx, nth) :: BV, RV, jacob, PhiV 
-      real(rkind), dimension(nx, nth, nions) ::  NV
-      real(rkind), dimension(4) :: regulopt
+        integer :: nx, nth,nions
+        real(rkind), dimension(nth) :: theta
+        real(rkind), dimension(nx) :: FV, dpsidx, Machi, Za, Te, Ti, B2avg
+        real(rkind), dimension(nx,nions) :: L11impi, UU, GG
+        real(rkind) :: R0, Aa
+        real(rkind), dimension(nions) :: Ai, Zi
+        real(rkind), dimension(nx, nth) :: BV, RV, jacob, PhiV 
+        real(rkind), dimension(nx, nth, nions) ::  NV
+        real(rkind), dimension(4) :: regulopt
 
-      real(rkind), dimension(nx) :: dmin, dmaj
-      real(rkind), dimension(nx, nth) :: nn
-
-
-      real(rkind), dimension(nx) :: asym_error
-      real(rkind), dimension(nx,nions) :: Factrot0
-      real(rkind), dimension(1:nth+1,1:nth+1) :: AAA, LL, CC, DD
-      real(rkind), dimension(1:nth+1) :: BB, nnya
-      real(rkind), dimension(1:nth,nions) :: Apsi
-      real(rkind), dimension(1:nth) ::  dum, nnx, nny, b2, nnp, TermGG, TermUU, FFF, GGG, HHH
-      real(rkind), dimension(size(AAA,1)) :: work  ! work array for LAPACK
-      real(rkind)  :: b2snavg, nsb2avg, b2sNNavg, FactV
-      !real(rkind)  :: TermUUneo, TermRRneo, TermRRneoa, TermRRneob, TermGGcl
-      !real(rkind)  :: TermGGneo, TermUUneoa, TermUUneob, TermRRcla, TermRRclb, TermRRcl
-      real(rkind)  :: err, prog, regulweight, dtheta, Erreur, dumscal
-      integer, dimension(size(AAA,1)) :: ipiv   ! pivot indices
-      integer :: n, info, ix, it, ierr, ierrmax,j
+        real(rkind), dimension(nx) :: dmin, dmaj
+        real(rkind), dimension(nx, nth) :: nn
 
 
+        real(rkind), dimension(nx) :: asym_error
+        real(rkind), dimension(nx,nions) :: Factrot0
+        real(rkind), dimension(1:nth+1,1:nth+1) :: AAA, LL, CC, DD
+        real(rkind), dimension(1:nth+1) :: BB, nnya
+        real(rkind), dimension(1:nth,nions) :: Apsi
+        real(rkind), dimension(1:nth) ::  dum, nnx, nny, b2, nnp, TermGG, TermUU, FFF, GGG, HHH
+        real(rkind), dimension(size(AAA,1)) :: work  ! work array for LAPACK
+        real(rkind)  :: b2snavg, nsb2avg, b2sNNavg, FactV
+        !real(rkind)  :: TermUUneo, TermRRneo, TermRRneoa, TermRRneob, TermGGcl
+        !real(rkind)  :: TermGGneo, TermUUneoa, TermUUneob, TermRRcla, TermRRclb, TermRRcl
+        real(rkind)  :: err, prog, regulweight, dtheta, Erreur, dumscal
+        integer, dimension(size(AAA,1)) :: ipiv   ! pivot indices
+        integer :: n, info, ix, it, ierr, ierrmax,j
 
-      ! External procedures defined in LAPACK
-      external DGETRF
-      external DGETRI
-
-      !allocate(AA(nth+1,nth+1),LL(nth+1,nth+1),CC(nth+1,nth+1),DD(nth+1,nth+1),BB(nth))
-
-      err         = regulopt(1)
-      prog        = regulopt(2)
-      regulweight = regulopt(3)
-      ierrmax     = int(regulopt(4))
 
 
-      ! Poloidal asymmetry
-      
-      nn = 1.0_rkind
+        ! External procedures defined in LAPACK
+        external DGETRF
+        external DGETRI
 
-      do ix = 1,nx
-        do j = 1,nions
-          Factrot0(ix,j) = (Aa/Ai(j))*(Machi(ix)/R0)**2
+        !allocate(AA(nth+1,nth+1),LL(nth+1,nth+1),CC(nth+1,nth+1),DD(nth+1,nth+1),BB(nth))
+
+        err         = regulopt(1)
+        prog        = regulopt(2)
+        regulweight = regulopt(3)
+        ierrmax     = int(regulopt(4))
+
+
+        ! Poloidal asymmetry
+        
+        nn = 1.0_rkind
+
+        do ix = 1,nx
+          do j = 1,nions
+            Factrot0(ix,j) = (Aa/Ai(j))*(Machi(ix)/R0)**2
+          enddo
+
+        do it=1,nth
+            b2(it) = BV(ix,it)**2/B2avg(ix)
+            do j =1,nions
+              Apsi(it,j) = jacob(ix,it)*FV(ix)*(Aa*mp)*L11impi(ix,j)/(q_e*Za(ix))/((dpsidx(ix))**2+1.e-33)
+            enddo
         enddo
 
-      do it=1,nth
-          b2(it) = BV(ix,it)**2/B2avg(ix)
-          do j =1,nions
-            Apsi(it,j) = jacob(ix,it)*FV(ix)*(Aa*mp)*L11impi(ix,j)/(q_e*Za(ix))/((dpsidx(ix))**2+1.e-33)
-          enddo
-      enddo
 
+          nnp = 2
+          nnx = nn(ix,:)
+          ierr = 1
+          Erreur = 2*err
 
-        nnp = 2
-        nnx = nn(ix,:)
-        ierr = 1
-        Erreur = 2*err
+          do while ( Erreur>err .and. ierr<ierrmax)
 
-        do while ( Erreur>err .and. ierr<ierrmax)
+            AAA = 0._rkind
+            LL  = 0._rkind
+            BB  = 0._rkind
 
-          AAA = 0._rkind
-          LL  = 0._rkind
-          BB  = 0._rkind
+            call fluxavgscal(nth, theta, b2/nnx, jacob(ix,:), b2snavg)
 
-          call fluxavgscal(nth, theta, b2/nnx, jacob(ix,:), b2snavg)
+            !TermGG = 1. - b2/nnx/b2snavg
+            !TermUU = b2/NV(ix,:) - b2sNNavg*b2/nnx/b2snavg
 
-          !TermGG = 1. - b2/nnx/b2snavg
-          !TermUU = b2/NV(ix,:) - b2sNNavg*b2/nnx/b2snavg
+            FFF = 0.0_rkind
+            GGG = 0.0_rkind
+            HHH = 0.0_rkind
 
-          FFF = 0.0_rkind
-          GGG = 0.0_rkind
-          HHH = 0.0_rkind
+            do j = 1,nions
+              call fluxavgscal(nth, theta , b2/NV(ix,:,j), jacob(ix,:), b2sNNavg)
+              FFF = FFF + Apsi(:,j)*( GG(ix,j) + b2/NV(ix,:,j)*UU(ix,j) )
+              GGG = GGG -Za(ix)*Te(ix)/Ti(ix)*(PhiV(ix,:)-PhiV(ix,1)) + Factrot0(ix,j)*(RV(ix,:)**2-RV(ix,1)**2)
+              HHH = HHH + Apsi(:,j)*b2/b2snavg*(GG(ix,j) + b2sNNavg*UU(ix,j)) 
+            enddo
 
-          do j = 1,nions
-            call fluxavgscal(nth, theta , b2/NV(ix,:,j), jacob(ix,:), b2sNNavg)
-            FFF = FFF + Apsi(:,j)*( GG(ix,j) + b2/NV(ix,:,j)*UU(ix,j) )
-            GGG = GGG -Za(ix)*Te(ix)/Ti(ix)*(PhiV(ix,:)-PhiV(ix,1)) + Factrot0(ix,j)*(RV(ix,:)**2-RV(ix,1)**2)
-            HHH = HHH + Apsi(:,j)*b2/b2snavg*(GG(ix,j) + b2sNNavg*UU(ix,j)) 
-          enddo
+            ! AA*n = BB
+            ! Remplissage matrices AA, BB & LL
 
-          ! AA*n = BB
-          ! Remplissage matrices AA, BB & LL
+            do it = 2,nth-1
 
-          do it = 2,nth-1
+              dtheta = 0.5*(theta(it+1) - theta(it-1))
+              AAA(it,it-1) = -0.5/dtheta
+              AAA(it,it) = -FFF(it)-0.5/dtheta*(GGG(it+1)-GGG(it-1))
+              AAA(it,it+1) = 0.5/dtheta
 
-            dtheta = 0.5*(theta(it+1) - theta(it-1))
-            AAA(it,it-1) = -0.5/dtheta
-            AAA(it,it) = -FFF(it)-0.5/dtheta*(GGG(it+1)-GGG(it-1))
+              LL(it, it-1) = 1.
+              LL(it, it) = -2.
+              LL(it, it+1) = 1.
+
+              BB(it) = -HHH(it)
+
+            enddo
+
+            it = 1
+            dtheta = 0.5*(theta(2)-theta(nth) + 2*PI)
+            AAA(it,it)   = -FFF(it) - (0.5/dtheta)*(GGG(it+1) - GGG(nth-1))
             AAA(it,it+1) = 0.5/dtheta
-
-            LL(it, it-1) = 1.
-            LL(it, it) = -2.
+            AAA(it,nth)  = -0.5/dtheta
+            LL(it, it)   = -2.
             LL(it, it+1) = 1.
-
+            LL(it, nth)  = 1.
             BB(it) = -HHH(it)
 
-          enddo
 
-          it = 1
-          dtheta = 0.5*(theta(2)-theta(nth) + 2*PI)
-          AAA(it,it)   = -FFF(it) - (0.5/dtheta)*(GGG(it+1) - GGG(nth-1))
-          AAA(it,it+1) = 0.5/dtheta
-          AAA(it,nth)  = -0.5/dtheta
-          LL(it, it)   = -2.
-          LL(it, it+1) = 1.
-          LL(it, nth)  = 1.
-          BB(it) = -HHH(it)
+            it = nth
+            dtheta = 0.5*(theta(1)-theta(nth-1) + 2*PI)
+            AAA(it,it-1) = -0.5/dtheta
+            AAA(it,it)   = -FFF(it)-0.5/dtheta*(GGG(1)-GGG(it-1))
+            AAA(it,it+1) = 0.5/dtheta
+            LL(it, it-1) = 1.
+            LL(it, it)   = -2.
+            LL(it, it+1) = 1.
+            BB(it) = -HHH(it)
 
+            it = nth+1
+            dtheta = 0.5*(theta(2)-theta(nth) + 2*PI)
+                AAA(it,it) = -1.
+            AAA(it,1)  = 1
+            BB(it) = 0.
 
-          it = nth
-          dtheta = 0.5*(theta(1)-theta(nth-1) + 2*PI)
-          AAA(it,it-1) = -0.5/dtheta
-          AAA(it,it)   = -FFF(it)-0.5/dtheta*(GGG(1)-GGG(it-1))
-          AAA(it,it+1) = 0.5/dtheta
-          LL(it, it-1) = 1.
-          LL(it, it)   = -2.
-          LL(it, it+1) = 1.
-          BB(it) = -HHH(it)
+            ! CC = transpose(AA)*AA+regulweight*transpose(LL)*LL
+            CC = transpose(AAA)
+            CC = matmul(CC,AAA)
+            DD = transpose(LL)
+            DD = matmul(DD,LL)
+            CC = CC + regulweight*DD
 
-          it = nth+1
-          dtheta = 0.5*(theta(2)-theta(nth) + 2*PI)
-              AAA(it,it) = -1.
-          AAA(it,1)  = 1
-          BB(it) = 0.
+            n  = size(CC,1)
+            DD = CC
+            call DGETRF(n, n, DD, n, ipiv, info)
 
-          ! CC = transpose(AA)*AA+regulweight*transpose(LL)*LL
-          CC = transpose(AAA)
-          CC = matmul(CC,AAA)
-          DD = transpose(LL)
-          DD = matmul(DD,LL)
-          CC = CC + regulweight*DD
+            if (info /= 0) then
+              stop 'Matrix is numerically singular!'
+            end if
 
-          n  = size(CC,1)
-          DD = CC
-          call DGETRF(n, n, DD, n, ipiv, info)
+            ! DGETRI computes the inverse of a matrix using the LU factorization
+            ! computed by DGETRF.
+            call DGETRI(n, DD, n, ipiv, work, n, info)
 
-          if (info /= 0) then
-            stop 'Matrix is numerically singular!'
-          end if
+            if (info /= 0) then
+              stop 'Matrix inversion failed!'
+            end if
 
-          ! DGETRI computes the inverse of a matrix using the LU factorization
-          ! computed by DGETRF.
-          call DGETRI(n, DD, n, ipiv, work, n, info)
+            CC = matmul(DD,transpose(AAA))
+            nnya = matmul(CC,BB)
+            !nnya = 1.
 
-          if (info /= 0) then
-            stop 'Matrix inversion failed!'
-          end if
+            call fluxavgscal(nth, theta, nnya(1:nth), jacob(ix,:), dumscal)
 
-          CC = matmul(DD,transpose(AAA))
-          nnya = matmul(CC,BB)
-          !nnya = 1.
+            nny = nnya(1:nth)/dumscal
+            nny = max(nny, 1.e-5)
 
-          call fluxavgscal(nth, theta, nnya(1:nth), jacob(ix,:), dumscal)
+            nnp = nnx
+            nnx = prog*nnp + (1-prog)*nny
 
-          nny = nnya(1:nth)/dumscal
-          nny = max(nny, 1.e-5)
+            do it = 2, nth-1
+              dum(it) = (log(nnx(it+1))-log(nnx(it-1))-GGG(it+1)+GGG(it-1))/(theta(it+1)-theta(it-1))
+            enddo
 
-          nnp = nnx
-          nnx = prog*nnp + (1-prog)*nny
+            it = 1
+            dum(it) = (log(nnx(it+1))-log(nnx(it))-GGG(it+1)+GGG(it))/(theta(it+1)-theta(it))
 
-          do it = 2, nth-1
-            dum(it) = (log(nnx(it+1))-log(nnx(it-1))-GGG(it+1)+GGG(it-1))/(theta(it+1)-theta(it-1))
-          enddo
+            it = nth
+            dum(it) = (log(nnx(it))-log(nnx(it-1))-GGG(it)+GGG(it-1))/(theta(it)-theta(it-1))
 
-          it = 1
-          dum(it) = (log(nnx(it+1))-log(nnx(it))-GGG(it+1)+GGG(it))/(theta(it+1)-theta(it))
+            Erreur = maxval(abs(dum-FFF+HHH/nnx))
 
-          it = nth
-          dum(it) = (log(nnx(it))-log(nnx(it-1))-GGG(it)+GGG(it-1))/(theta(it)-theta(it-1))
+            ierr = ierr+1
 
-          Erreur = maxval(abs(dum-FFF+HHH/nnx))
+          end do
 
-          ierr = ierr+1
+          asym_error(ix) = Erreur
 
-        end do
+          nn(ix,:) = nnx
+          dmin(ix) = 2.*sum((nnx-1.)*cos(theta))/float(nth)
+          dmaj(ix) = 2.*sum((nnx-1.)*sin(theta))/float(nth)
 
-        asym_error(ix) = Erreur
-
-        nn(ix,:) = nnx
-        dmin(ix) = 2.*sum((nnx-1.)*cos(theta))/float(nth)
-        dmaj(ix) = 2.*sum((nnx-1.)*sin(theta))/float(nth)
-
-      enddo
+        enddo
 
     end subroutine asymmetry_fg
 
@@ -1091,70 +1092,70 @@ module facit_mod
 
     subroutine facs(nx, Zimp, ft, f1, f2, f3, y1, y2, y3, y4, adps)
 
-    !*******************************************************************************
-    ! set of factors fitted with respect to NEO
-    !*******************************************************************************
-    ! INPUTS:
-    ! -------
-    ! nx ---> size of radial arrays [-]
-    ! Zimp -> impurity charge [-]
-    ! ft ---> trapped particle fraction [-]
-    !*******************************************************************************
-    ! OUTPUTS:
-    ! --------
-    ! f1 --> low collisionality saturation of PS C0a coefficient [-]
-    ! f2 --> correction to low-Z impurity-ion friction in C0a coefficient [-]
-    ! f3 --> factor in i-e heat exchange contribution to C0a [-]
-    ! y1 --> factor of the (1,1) banana viscosity coefficient of the impurity [-]
-    ! y2 --> factor of the (1,2) plateau viscosity coefficient of the impurity [-]
-    ! y3 --> factor of the (1,2) Pfirsch-Schlüter viscosity coefficient of the impurity [-]
-    ! y4 --> factor of the (1,2) banana viscosity coefficient of the main ion [-]
-    !*******************************************************************************
+      !*******************************************************************************
+      ! set of factors fitted with respect to NEO
+      !*******************************************************************************
+      ! INPUTS:
+      ! -------
+      ! nx ---> size of radial arrays [-]
+      ! Zimp -> impurity charge [-]
+      ! ft ---> trapped particle fraction [-]
+      !*******************************************************************************
+      ! OUTPUTS:
+      ! --------
+      ! f1 --> low collisionality saturation of PS C0a coefficient [-]
+      ! f2 --> correction to low-Z impurity-ion friction in C0a coefficient [-]
+      ! f3 --> factor in i-e heat exchange contribution to C0a [-]
+      ! y1 --> factor of the (1,1) banana viscosity coefficient of the impurity [-]
+      ! y2 --> factor of the (1,2) plateau viscosity coefficient of the impurity [-]
+      ! y3 --> factor of the (1,2) Pfirsch-Schlüter viscosity coefficient of the impurity [-]
+      ! y4 --> factor of the (1,2) banana viscosity coefficient of the main ion [-]
+      !*******************************************************************************
 
-      use constants, only: rkind
-      implicit none
-
-
-      integer, intent(in) :: nx
-      !real(dp) :: Zimp
-      real(rkind), dimension(nx), intent(in) :: Zimp
-      real(rkind), dimension(nx), intent(in) :: ft
-
-      !real(dp) :: f1, f2, f3
-      real(rkind), dimension(nx),intent(out) :: f1, f2, f3
-      real(rkind), dimension(nx),intent(out)  :: adps, y1, y2, y3, y4
-      real(rkind), dimension(nx) :: w11, w12, w13, w14
-      real(rkind), dimension(nx) :: wp1, wp2, wp3, wp4, yp
+        use constants, only: rkind
+        implicit none
 
 
-      ! f's:
-      f1 =  (-6.83808564e5 + 2.46855534e6*Zimp)/( 1 + 6.04692708e5*Zimp**1.61470425)
-      f2 = (88.28389935 + 10.50852772*Zimp)/( 1 + 0.2157175*Zimp**2.57338463)
-      f3 = (-3.15171054e6 + 1.92908543e6*Zimp)/(1+5.26716920e6*Zimp**8.33610108e-01)
+        integer, intent(in) :: nx
+        !real(dp) :: Zimp
+        real(rkind), dimension(nx), intent(in) :: Zimp
+        real(rkind), dimension(nx), intent(in) :: ft
+
+        !real(dp) :: f1, f2, f3
+        real(rkind), dimension(nx),intent(out) :: f1, f2, f3
+        real(rkind), dimension(nx),intent(out)  :: adps, y1, y2, y3, y4
+        real(rkind), dimension(nx) :: w11, w12, w13, w14
+        real(rkind), dimension(nx) :: wp1, wp2, wp3, wp4, yp
 
 
-      ! y's:
-      w11 = 1.23805214e-05*Zimp**3 - 1.03611576e-03*Zimp**2 + 1.85221287e-02*Zimp + 1.29758029
-      w12 = -5.84996779e-05*Zimp**3 + 4.79623045e-03*Zimp**2 -1.01924030e-01*Zimp - 5.81816797
-      w13 = 5.98152997e-05*Zimp**3 - 4.84255587e-03*Zimp**2 + 1.03585208e-01*Zimp + 5.71139227
-      w14 = -1.33253954e-05*Zimp**3 + 1.04416741e-03*Zimp**2 - 1.94973421e-02*Zimp - 1.10061492
+        ! f's:
+        f1 =  (-6.83808564e5 + 2.46855534e6*Zimp)/( 1 + 6.04692708e5*Zimp**1.61470425)
+        f2 = (88.28389935 + 10.50852772*Zimp)/( 1 + 0.2157175*Zimp**2.57338463)
+        f3 = (-3.15171054e6 + 1.92908543e6*Zimp)/(1+5.26716920e6*Zimp**8.33610108e-01)
 
-      y1 = w11*ft**2 + w12*ft + w13*ft**0.5 + w14
 
-      wp1 = ( 0.11603574 + 0.47297835*Zimp**0.94456671)/( 1 + 0.1245426*Zimp**1.20221441)
-      wp2 = ( 0.6327602 - 2.92116611*Zimp**1.06310182)/( 1 + 0.30469549*Zimp**1.16495283)
-      wp3 = ( -0.69318477 + 2.85619511*Zimp**1.11765611)/( 1 + 0.34127361*Zimp**1.1952383)
-      wp4 = ( 1.80217558 - 1.0080554*Zimp**0.96345934)/( 1 + 0.51677339*Zimp**1.11131896)
+        ! y's:
+        w11 = 1.23805214e-05*Zimp**3 - 1.03611576e-03*Zimp**2 + 1.85221287e-02*Zimp + 1.29758029
+        w12 = -5.84996779e-05*Zimp**3 + 4.79623045e-03*Zimp**2 -1.01924030e-01*Zimp - 5.81816797
+        w13 = 5.98152997e-05*Zimp**3 - 4.84255587e-03*Zimp**2 + 1.03585208e-01*Zimp + 5.71139227
+        w14 = -1.33253954e-05*Zimp**3 + 1.04416741e-03*Zimp**2 - 1.94973421e-02*Zimp - 1.10061492
 
-      yp = wp1*ft**2 + wp2*ft + wp3*ft**0.5 + wp4
-      y4 = yp/y1
+        y1 = w11*ft**2 + w12*ft + w13*ft**0.5 + w14
 
-      y2 = 21.31*ft**3 - 21.88*ft**2 + 7.316*ft + 0.6264
-    !  y3 = ((4.2857e5 - 4.4978e5*Zimp)/(1 - 1.3557e5*Zimp**1.9))*((-9.09204093e6 + 8.15802759e6*Zimp)/(1.0 + 3.25263641e6*Zimp**1.07640221))
-      y3 = 8.85/Zimp**2.98 - 7.96/Zimp**1.82 - 9.27/Zimp**1.98 + 8.34/Zimp**0.82
+        wp1 = ( 0.11603574 + 0.47297835*Zimp**0.94456671)/( 1 + 0.1245426*Zimp**1.20221441)
+        wp2 = ( 0.6327602 - 2.92116611*Zimp**1.06310182)/( 1 + 0.30469549*Zimp**1.16495283)
+        wp3 = ( -0.69318477 + 2.85619511*Zimp**1.11765611)/( 1 + 0.34127361*Zimp**1.1952383)
+        wp4 = ( 1.80217558 - 1.0080554*Zimp**0.96345934)/( 1 + 0.51677339*Zimp**1.11131896)
 
-    !  adps = (-110378.3491 + 753838.926571*Zimp**1.06107833841)/(1+ 1007273.22737*Zimp)
-      adps = -0.109/Zimp + 0.743*Zimp**0.06
+        yp = wp1*ft**2 + wp2*ft + wp3*ft**0.5 + wp4
+        y4 = yp/y1
+
+        y2 = 21.31*ft**3 - 21.88*ft**2 + 7.316*ft + 0.6264
+      !  y3 = ((4.2857e5 - 4.4978e5*Zimp)/(1 - 1.3557e5*Zimp**1.9))*((-9.09204093e6 + 8.15802759e6*Zimp)/(1.0 + 3.25263641e6*Zimp**1.07640221))
+        y3 = 8.85/Zimp**2.98 - 7.96/Zimp**1.82 - 9.27/Zimp**1.98 + 8.34/Zimp**0.82
+
+      !  adps = (-110378.3491 + 753838.926571*Zimp**1.06107833841)/(1+ 1007273.22737*Zimp)
+        adps = -0.109/Zimp + 0.743*Zimp**0.06
 
 
     end subroutine facs
