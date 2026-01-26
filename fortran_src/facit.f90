@@ -829,7 +829,9 @@ subroutine asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, delt
         S2 = 0.0_rkind
         S3 = 0.0_rkind
 
-        
+        do j= 1,nions
+          A_M(:,j) = nuswca(:,j)*qmag**2/(invaspct*(epsk + 1.e-33))
+        enddo
 
         do j = 1,nions
           S1 = S1 + A_M(:,j)*(GG(:,j)+UU(:,j))
