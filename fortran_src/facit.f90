@@ -385,7 +385,7 @@ module facit_mod
           dNH = AsymN(:,:,1)
           dNV = AsymN(:,:,2)
 
-          call asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Aa, Za, &
+          call asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai, Aa, Za, &
                             dNH, dNV, dminphia, dmajphia, dmin, dmaj)
 
           do i = 1, nx
@@ -709,13 +709,13 @@ subroutine asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, delt
       implicit none
 
       integer, intent(in) :: nx, nions
-      real(rkind), dimension(nx), intent(in) :: epsK, qmag, deltaM, Za
-      real(rkind), dimension(nx,nions), intent(in) :: UU, GG, nuswca, dNH, dNV
+      real(rkind), dimension(nx), intent(in) :: epsK, qmag, deltaM
+      real(rkind), dimension(nx,nions), intent(in) :: UU, GG, nuswca, dNH, dNV, Za
       real(rkind), dimension(nx), intent(in) :: dminphia, dmajphia, xn
       real(rkind), intent(in) :: Aa, invaspct
       real(rkind), dimension(nions), intent(in) :: Ai
       real(rkind), dimension(nx,nions) :: A_M
-      real(rkind), dimension(nx) ::  UG, AGe, CD0, QQ, FF
+      real(rkind), dimension(nx) ::  UG, AGe, CD0, QQ, FF, AAM, BBM, LLM
       !real(rkind), dimension(nx) :: RR,  HH, KK
       real(rkind), dimension(nx) :: CD, CDV, RD, DD, num, cosa, sina,S1,S2,S3,S4
       real(rkind), dimension(nx), intent(out) :: dmin, dmaj
@@ -750,28 +750,31 @@ subroutine asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, delt
       !enddo
       !AGe = Ae*GG
       CD0 = -(epsk + 1.e-33)/(1+S2/S1)
-      
+
       !HH = 1.0 + deltaM*CD0*RR/GG
       !HH = 1.0_rkind
       !QQ = CD0*(dNV/(epsk + 1.e-33))*UU/GG
       QQ = CD0/(epsk + 1.e-33) * S3/S1
       !FF = CD0*(1-0.5*dNH/(epsk + 1.e-33)*UU/GG - deltaM*(RR/GG)/(epsk + 1.e-33))
       !FF = CD0*(1-0.5*dNH*(UG-1.0)/(epsk + 1.e-33) - deltaM*(RR/GG)/(epsk + 1.e-33))
-      FF = CD0*(-1+0.5*1/(epsk + 1.e-33) * S4/S1)
+      FF = CD0*(1-(0.5*1/(epsk + 1.e-33) * S4/S1))
       !KK = 1.0_rkind
+	AAM= FF + 0.5*(dminphia-deltaM)
+	BBM = 0.5*(QQ-dmajphia)
+
+      CD = FF - 0.5*(dminphia-deltaM)
+      CDV = -0.5*(QQ+dmajphia)
+      RD = sqrt(AAM**2 + BBM**2)
+	LLM = (epsk + 1.e-33)/CD0 * S1
+      DD = RD**2 *(1 +LLM**2)
 
 
-      CD = 0.5*(-dminphia+deltaM+ ((epsk + 1.e-33)/CD0 * QQ))
-      CDV = -0.5*(dmajphia + 2*((epsk + 1.e-33)/CD0 * FF))
-      RD = sqrt(CD**2 +CDV**2)
-      DD = RD**2 *(1 +((epsk + 1.e-33)/CD0)**2)
-
-      cosa = RD/DD * (deltaM - dminphia- CD + ((epsk + 1.e-33)/CD0)*(CDV + QQ) -(epsk + 1.e-33)/CD0 *(((epsk + 1.e-33)/CD0*(CD+2*FF))+CDV+dmajphia))
-      sina = RD/DD * (((epsk + 1.e-33)/CD0*(CD+2*FF))-CDV-dmajphia -(epsk + 1.e-33)/CD0*( deltaM - dminphia- CD + ((epsk + 1.e-33)/CD0)*(CDV + QQ) ) )
-
+	cosa = RD /DD * ( AAM*(LLM**2 - 1.0_rkind) + LLM*BBM )
+	sina = RD /DD * ( 2.0_rkind*LLM*AAM + BBM*(LLM**2 - 1.0_rkind) )
 
       dmin = CD + RD*cosa
       dmaj = CDV + RD*sina
+
 
 
 
