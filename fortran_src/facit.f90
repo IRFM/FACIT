@@ -22,7 +22,7 @@ module facit_mod
                     pol_asym, full_geom,solution, rotation, regulopt, &           ! different options in the model
                     Flux_imp, Da, Da_M, Vconv,Vconv_M, nn, dmin, dmaj, & 
                     Da_PS_M, Da_BP_M, Da_CL_M, Ka_PS_M, Ka_BP_M, Ka_CL_M, &          ! supplementary outputs: PS, BP, CL & centrifugal components
-                    Ha_PS_M, Ha_BP_M, Ha_CL_M,Va_PS_M,Va_BP_M,Va_CL_M, &              ! main outputs: flux, transport coefficients and poloidal asymmetry
+                    Ha_PS_M, Ha_BP_M, Ha_CL_M,Va_PS_M,Va_BP_M,Va_CL_M,Tauii, &              ! main outputs: flux, transport coefficients and poloidal asymmetry
                     Da_PS, Da_BP, Da_CL, Ka_PS, Ka_BP, Ka_CL, &          ! supplementary outputs: PS, BP, CL & centrifugal components
                     Ha_PS, Ha_BP, Ha_CL,Va_PS,Va_BP,Va_CL)               ! supplementary outputs: PS, BP, CL
 
@@ -118,6 +118,7 @@ module facit_mod
       real(rkind), dimension(nx,nions), intent(out) ::  Da_M, Vconv_M
       real(rkind), dimension(nx, nth), intent(out) :: nn
       real(rkind), dimension(nx,nions), intent(out) :: Da_BP_M, Da_PS_M, Da_CL_M, Ka_BP_M, Ka_PS_M, Ka_CL_M, Ha_BP_M, Ha_PS_M, Ha_CL_M, Va_BP_M, Va_PS_M, Va_CL_M
+      real(rkind), dimension(nx,nions), intent(out) ::  Tauii
       real(rkind), dimension(nx), intent(out) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CL, Ha_BP, Ha_PS, Ha_CL, Va_BP, Va_PS, Va_CL
 
       ! OTHER
@@ -137,7 +138,7 @@ module facit_mod
       real(rkind), dimension(nx,nions) :: LniiNRL, LniimpNRL
     !  real(rkind), dimension(nx) :: Tauee, Taueimp, wee, nuestar
     !  real(rkind), dimension(nx,nions) :: Tauei, Tauie
-      real(rkind), dimension(nx,nions) ::  Tauii, Tauiimp
+      real(rkind), dimension(nx,nions) :: Tauiimp
       real(rkind), dimension(nx) :: Tauimpe, Tauimpimp
       real(rkind), dimension(nx,nions) :: Tauimpi
       real(rkind), dimension(nx) ::  wimpimp, nuimpstar, rhoLimp2, Zeff
@@ -149,7 +150,7 @@ module facit_mod
       real(rkind), dimension(nx) :: Cgeo_G, Cgeo_Gcl
       real(rkind), dimension(nx,nions) :: Cgeo_U
       real(rkind), dimension(nx, nth) :: b2
-      real(rkind), dimension(nx) :: b2navg, nb2avg, nNVavg, b2NVavg
+      real(rkind), dimension(nx) :: b2navg, nb2avg, nNVavg, b2NVavg, Nss
       real(rkind), dimension(nx,nions) :: K11a, K12a, K22a
       real(rkind), dimension(nx,nions) :: K11i, K12i, K22i
       real(rkind), dimension(nx,nions) :: Vra_BP_M, Vra_PS_M , Vra_CL_M
@@ -175,9 +176,12 @@ module facit_mod
 !      if (maxval(abs(dpsidx)).lt.1.0e-33_rkind) then
 !        dpsidx = amin**2*B0*xn/qmag
 !      endif
+	
+	Zeff = Za**2*Na/(Ne)
+	do i = 1,nions
+      Zeff = Zeff +  Zi(:,i)**2 *Ni(:,i)/(Ne)
+	enddo
 
-
-      Zeff = (Za**2*Na +  Zi(:,1)**2 *Ni(:,1))/(Ne)
       do i = 1, nx 
         grad_ln_na(i) = gradNa(i)/(Na(i) + 1.e-33)
         grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33)
@@ -194,17 +198,18 @@ module facit_mod
   !      Machi = 0.0_rkind  
   !    endif
 
-    
+	
+      deltaM = 0.0_rkind
+	Nss = 0.0_rkind
       meff = 0.0_rkind
       do j = 1, nions
         meff = meff + Ni(:,j)*Ai(j) *mp 
+	  Nss =  Nss + Ni(:,j)
       enddo
 
-      if (nions > 1) then
-        deltaM = 0
-      else 
-        deltaM = 2*(Aa/Ai(1))*Machi**2*epsk
-      endif
+	meff = meff/Nss
+
+	deltaM = 2*(ma/meff)*Machi**2*epsk
 
       !not done
 
@@ -282,6 +287,7 @@ module facit_mod
       nuimpstar = 1.0/((eps15 + 1.e-33)*wimpimp*Tauimpimp)
 
       wca    = q_e*Za*B0/ma ! impurity cyclotron frequency
+
       do j=1, nions
         nuswca(:,j) = L11impi(:,j)/wca ! ratio of impurity collision frequency to cyclotron frequency
       enddo
@@ -481,7 +487,7 @@ module facit_mod
         !Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
         Ka_PS_M(:,j)   = (Za/Zi(:,j))*Da_PS_M(:,j)
         Ha_PS_M(:,j)   = -((1.0 + (Za/Zi(:,j))*(C0a(:,j) - 1.0)) + (Cgeo_U(:,j)/Cgeo_G)*(Za/Zi(:,j))*(C0a(:,j) + ki(:,j)))*Da_PS_M(:,j)
-        Vra_PS_M(:,j)  = -Da_PS_M(:,j)*grad_ln_na/amin + Ka_PS_M(:,j)*grad_ln_ni(:,j)/amin + Ha_PS_M(:,j)*grad_ln_Ti/amin 
+        Vra_PS_M(:,j)  = -Da_PS_M(:,j)*grad_ln_na + Ka_PS_M(:,j)*grad_ln_ni(:,j)/amin + Ha_PS_M(:,j)*grad_ln_Ti/amin 
         Va_PS_M(:,j)  = Ka_PS_M(:,j)*grad_ln_ni(:,j)/amin + Ha_PS_M(:,j)*grad_ln_Ti/amin
         Da_PS = Da_PS + Da_PS_M(:,j)
         Ka_PS = Ka_PS + Ka_PS_M(:,j)
@@ -501,7 +507,7 @@ module facit_mod
         Da_CL_M(:,j)   = (2.0*eps2*Cgeo_Gcl/Cgeo_G)*Da_PS_M(:,j)/(2*qmag**2)
         Ka_CL_M(:,j)   = (Za/Zi(:,j))*Da_CL_M(:,j)
         Ha_CL_M(:,j)   = -(1.0 + (Za/Zi(:,j))*(C0a(:,j) - 1.0))*Da_CL_M(:,j)
-        Vra_CL_M(:,j)  = -Da_CL_M(:,j)*grad_ln_na/amin + Ka_CL_M(:,j)*grad_ln_ni(:,j)/amin + Ha_CL_M(:,j)*grad_ln_Ti/amin
+        Vra_CL_M(:,j)  = -Da_CL_M(:,j)*grad_ln_na + Ka_CL_M(:,j)*grad_ln_ni(:,j)/amin + Ha_CL_M(:,j)*grad_ln_Ti/amin
         Va_CL_M(:,j) = Ka_CL_M(:,j)*grad_ln_ni(:,j)/amin + Ha_CL_M(:,j)*grad_ln_Ti/amin
         Da_CL = Da_CL + Da_CL_M(:,j)
         Ka_CL = Ka_CL + Ka_CL_M(:,j)
@@ -524,7 +530,7 @@ module facit_mod
         Da_BP_M(:,j) = 1.5*q_e*Ti*(1.0/(1.0/K11a(:,j) + 1.0/K11i(:,j)))/(Za**2*q_e**2*FV**2*Na)
         Ka_BP_M(:,j) = (Za/Zi(:,j))*Da_BP_M(:,j)
         Ha_BP_M(:,j) = ((Za/Zi(:,j))*(K12i(:,j)/K11i(:,j) - 1.5) - (K12a(:,j)/K11a(:,j) - 1.5))*Da_BP_M(:,j)
-        Vra_BP_M(:,j) = -Da_BP_M(:,j)*grad_ln_na/amin + Ka_BP_M(:,j)*grad_ln_ni(:,j)/amin + Ha_BP_M(:,j)*grad_ln_Ti/amin
+        Vra_BP_M(:,j) = -Da_BP_M(:,j)*grad_ln_na + Ka_BP_M(:,j)*grad_ln_ni(:,j)/amin + Ha_BP_M(:,j)*grad_ln_Ti/amin
         Va_BP_M(:,j) = Ka_BP_M(:,j)*grad_ln_ni(:,j)/amin + Ha_BP_M(:,j)*grad_ln_Ti/amin
         Da_BP = Da_BP + Da_BP_M(:,j)
         Ka_BP = Ka_BP + Ka_BP_M(:,j)
@@ -897,18 +903,18 @@ subroutine asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, delt
         use constants, only: rkind, mp, q_e, pi
         implicit none
 
-        integer :: nx, nth,nions
-        real(rkind), dimension(nth) :: theta
-        real(rkind), dimension(nx) :: FV, dpsidx, Machi, Za, Te, Ti, B2avg
-        real(rkind), dimension(nx,nions) :: L11impi, UU, GG
-        real(rkind) :: R0, Aa
-        real(rkind), dimension(nions) :: Ai, Zi
-        real(rkind), dimension(nx, nth) :: BV, RV, jacob, PhiV 
-        real(rkind), dimension(nx, nth, nions) ::  NV
-        real(rkind), dimension(4) :: regulopt
+        integer, intent(in) :: nx, nth,nions
+        real(rkind), dimension(nth), intent(in) :: theta
+        real(rkind), dimension(nx), intent(in) :: FV, dpsidx, Machi, Za, Te, Ti, B2avg
+        real(rkind), dimension(nx,nions), intent(in) :: L11impi, UU, GG
+        real(rkind), intent(in) :: R0, Aa
+        real(rkind), dimension(nions), intent(in) :: Ai, Zi
+        real(rkind), dimension(nx, nth), intent(in) :: BV, RV, jacob, PhiV 
+        real(rkind), dimension(nx, nth, nions), intent(in) ::  NV
+        real(rkind), dimension(4), intent(in) :: regulopt
 
-        real(rkind), dimension(nx) :: dmin, dmaj
-        real(rkind), dimension(nx, nth) :: nn
+        real(rkind), dimension(nx), intent(out) :: dmin, dmaj
+        real(rkind), dimension(nx, nth), intent(out) :: nn
 
 
         real(rkind), dimension(nx) :: asym_error
