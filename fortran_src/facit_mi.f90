@@ -13,7 +13,7 @@ module facit_mod
 
 
 
-    subroutine FACIT(nx, nth, xn,nions, theta, &                          
+    subroutine FACIT_MI(nx, nth, xn,nions, theta, &                          
                     Za, Aa, Zi, Ai, &                                    ! impurity and main ion charge and mass
                     Te, Ti, Ne, Ni, Na, Machi, &                         ! plasma profiles
                     gradTi, gradNi, gradNa, &                            ! gradients
@@ -561,7 +561,7 @@ module facit_mod
       Flux_imp = -Da*gradNa + Na*Vconv
 
       return
-    end subroutine FACIT
+    end subroutine FACIT_MI
 
 
 
