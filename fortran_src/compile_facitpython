@@ -4,9 +4,8 @@ export F77=ifx
 
 source /opt/intel/oneapi/setvars.sh
 
-f2py -c constants.f90 facit.f90 \
-    -m facitpy \
-    --opt='-O2 -r8' \
-    -llapack
-
+SETUPTOOLS_USE_DISTUTILS=stdlib f2py -c constants.f90 facit_mi.f90 \
+	-m facitpy \
+	--opt='-02 -r8' \
+	-llapack
 
