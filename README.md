@@ -11,5 +11,5 @@ References to be cited when using FACIT :
 
 2. Maget P. et al, Corrigendum : An analytic model for the collisional transport and poloidal asymmetry distribution of impurities in tokamak plasmas, Plasma Physics and Controlled Fusion 64(6) 069501 (2022). https://doi.org/10.1088/1361-6587/ac63e0
 
-3. Fajardo D. et al, Analytical model for collisional impurity transport in tokamaks at arbitrary collisionality, Plasma Phys. Control. Fusion.  https://doi.org/10.1088/1361-6587/ac5b4d
+3. Fajardo D. et al, Analytical model for collisional impurity transport in tokamaks at arbitrary collisionality, Plasma Phys. Control. Fusion 64 055017 (2022). https://doi.org/10.1088/1361-6587/ac5b4d
 
