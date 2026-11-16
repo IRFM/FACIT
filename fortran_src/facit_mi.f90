@@ -102,28 +102,29 @@ module facit_mod
       real(rkind), dimension(nth), intent(in)  :: theta
       real(rkind), dimension(nx), intent(in)  :: Te, Ti, Na, gradTi, Ne, gradNa
       real(rkind), dimension(nx,nions), intent(in) :: Ni, gradNi
-      real(rkind), dimension(nx), intent(in)  :: qmag, xn, dpsidx, FV, Za
+      real(rkind), dimension(nx), intent(in)  :: qmag, xn, FV, Za
       real(rkind), dimension(nx), intent(in) :: Machi !check
       real(rkind), intent(in) :: B0, R0, invaspct, Aa
       real(rkind), dimension(nions), intent(in)  :: Ai
       real(rkind), dimension(nx,nions), intent(in) :: Zi
       real(rkind), dimension(nx,nth), intent(in) :: jacob, BV, RV
       real(rkind), dimension(nx,nth), intent(in) :: PhiV
-      real(rkind), dimension(nx,nth,nions), intent(in) :: NV
-      real(rkind), dimension(4), intent(in) :: regulopt
+       real(rkind), dimension(4), intent(in) :: regulopt
       logical, intent(in) :: pol_asym, pol_asym_in, full_geom, rotation
       integer, intent(in):: solution
+      real(rkind), dimension(nx), intent(inout)  :: dpsidx
+      real(rkind), dimension(nx,nth,nions), intent(inout) :: NV
 
       ! OUTPUTS
       real(rkind), dimension(nx), intent(out) :: Da, Vconv, dmin, dmaj, Flux_imp
       real(rkind), dimension(nx,nions), intent(out) ::  Da_M, Vconv_M
-      real(rkind), dimension(nx, nth), intent(out) :: nn
+      real(rkind), dimension(nx, nth), intent(inout) :: nn
       real(rkind), dimension(nx,nions), intent(out) :: Da_BP_M, Da_PS_M, Da_CL_M, Ka_BP_M, Ka_PS_M, Ka_CL_M, Ha_BP_M, Ha_PS_M, Ha_CL_M, Va_BP_M, Va_PS_M, Va_CL_M
       real(rkind), dimension(nx,nions), intent(out) ::  Tauii
       real(rkind), dimension(nx), intent(out) :: Da_BP, Da_PS, Da_CL, Ka_BP, Ka_PS, Ka_CL, Ha_BP, Ha_PS, Ha_CL, Va_BP, Va_PS, Va_CL
 
       ! OTHER
-      integer :: i,j, p, n, it, ix!, info, ierr, ierrmax
+      integer :: i,j, p, n, it, ix, ik, ith1, ith2, ith3, ith4 !, info, ierr, ierrmax
       real(rkind) :: rho_sep, ma, ftrap, ki_Redl, C2
       real(rkind), dimension(nx,2) :: AsymPhi
       real(rkind), dimension(nx, nions, 2) :: AsymN
@@ -169,13 +170,13 @@ module facit_mod
       mi = Ai*mp ! main ion mass
       ma = Aa*mp ! impurity mass
 
-      if (maxval(RV,1).lt.1.0e-33_rkind) then
+      if (maxval(RV(:,1)).lt.1.0e-33_rkind) then
       	 epsk  = xn*invaspct ! local inverse aspect ratio
       else
          do i = 1, nx 
             epsk(i) = (maxval(RV(i,:)) - minval(RV(i,:)))/(maxval(RV(i,:)) + minval(RV(i,:)))
          enddo
-      end
+      endif
       eps15 = (epsk + 1.0e-33)**1.5
       eps2  = (epsk + 1.0e-33)**2
 
@@ -412,7 +413,7 @@ module facit_mod
           enddo
 
 
-        else if (.not. pol_asym_in) 
+        else if (.not. pol_asym_in) then
 
           ! Poloidally symmetric case
 
@@ -454,7 +455,7 @@ module facit_mod
             nn(i,:) = 1.0 + dmin(i)*cos(theta) + dmaj(i)*sin(theta)
           enddo
 
-        else if (.not. pol_asym_in) 
+        else if (.not. pol_asym_in) then
 
           dminphia = 0.0_rkind
           dmajphia = 0.0_rkind
