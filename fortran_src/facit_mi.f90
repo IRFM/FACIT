@@ -18,8 +18,8 @@ module facit_mod
                     Te, Ti, Ne, Ni, Na, Machi, &                         ! plasma profiles
                     gradTi, gradNi, gradNa, &                            ! gradients
                     invaspct, B0, R0, qmag, dpsidx, FV, BV, RV, jacob, & ! equilibrium
-                    AsymPhi, AsymN, &                                    ! input asymmetries
-                    pol_asym, full_geom,solution, rotation, regulopt, &           ! different options in the model
+                    PhiV, NV, &                                    ! input asymmetries
+                    pol_asym, pol_asym_in, full_geom,solution, rotation, regulopt, &           ! different options in the model
                     Flux_imp, Da, Da_M, Vconv,Vconv_M, nn, dmin, dmaj, & 
                     Da_PS_M, Da_BP_M, Da_CL_M, Ka_PS_M, Ka_BP_M, Ka_CL_M, &          ! supplementary outputs: PS, BP, CL & centrifugal components
                     Ha_PS_M, Ha_BP_M, Ha_CL_M,Va_PS_M,Va_BP_M,Va_CL_M,Tauii, &              ! main outputs: flux, transport coefficients and poloidal asymmetry
@@ -71,9 +71,10 @@ module facit_mod
     ! BV --------> magnetic field [T] {arr, (nx,nth)}
     ! RV --------> major radius [m] {arr, (nx,nth)}
     ! jacob -----> Jacobian of the coordinate system [m/T] {arr, (nx,nth)}
-    ! AsymPhi ---> poloidal asymmetry of electrostatic potential [-] {arr, (nx,2)}
-    ! AsymN -----> poloidal asymmetry of main ion density [-] {arr, (nx,2)}
+    ! PhiV ---> poloidal asymmetry of electrostatic potential [-] {arr, (nx,nth)}
+    ! NV -----> poloidal asymmetry of main ion density [-] {arr, (nx,nth)}
     ! pol_asym --> poloidally symmetric (False) or asymmetric (True) system {boolean}
+    ! pol_asym_in --> use poloidally symmetric given as input {boolean}
     ! full_geom -> analytical (False) or iterative (True) geometry {boolean}
     ! solution ---> 
     ! rotation --> consider toroidal rotation {boolean}
@@ -107,10 +108,10 @@ module facit_mod
       real(rkind), dimension(nions), intent(in)  :: Ai
       real(rkind), dimension(nx,nions), intent(in) :: Zi
       real(rkind), dimension(nx,nth), intent(in) :: jacob, BV, RV
-      real(rkind), dimension(nx,2), intent(in) :: AsymPhi
-      real(rkind), dimension(nx, nions, 2), intent(in) :: AsymN
+      real(rkind), dimension(nx,nth), intent(in) :: PhiV
+      real(rkind), dimension(nx,nth,nions), intent(in) :: NV
       real(rkind), dimension(4), intent(in) :: regulopt
-      logical, intent(in) :: pol_asym, full_geom, rotation
+      logical, intent(in) :: pol_asym, pol_asym_in, full_geom, rotation
       integer, intent(in):: solution
 
       ! OUTPUTS
@@ -123,9 +124,9 @@ module facit_mod
 
       ! OTHER
       integer :: i,j, p, n, it, ix!, info, ierr, ierrmax
-      real(rkind) :: amin, ma, ftrap, ki_Redl, C2
-      real(rkind), dimension(nx,nth) :: PhiV
-      real(rkind), dimension(nx,nth,nions) :: NV
+      real(rkind) :: rho_sep, ma, ftrap, ki_Redl, C2
+      real(rkind), dimension(nx,2) :: AsymPhi
+      real(rkind), dimension(nx, nions, 2) :: AsymN
       real(rkind), dimension(nions)  :: mi
       real(rkind), dimension(nx) ::  grad_ln_na, Te15, Ti15, grad_ln_Ti, meff, alpha0
       real(rkind), dimension(nx,nions)  :: grad_ln_ni
@@ -168,14 +169,21 @@ module facit_mod
       mi = Ai*mp ! main ion mass
       ma = Aa*mp ! impurity mass
 
-      epsk  = xn*invaspct ! local inverse aspect ratio
+      if (maxval(RV,1).lt.1.0e-33_rkind) then
+      	 epsk  = xn*invaspct ! local inverse aspect ratio
+      else
+         do i = 1, nx 
+            epsk(i) = (maxval(RV(i,:)) - minval(RV(i,:)))/(maxval(RV(i,:)) + minval(RV(i,:)))
+         enddo
+      end
       eps15 = (epsk + 1.0e-33)**1.5
       eps2  = (epsk + 1.0e-33)**2
-      amin  = invaspct*R0 ! minor radius
 
-!      if (maxval(abs(dpsidx)).lt.1.0e-33_rkind) then
-!        dpsidx = amin**2*B0*xn/qmag
-!      endif
+      rho_sep  = invaspct*R0 	! rho_tor at separatrix
+
+      if (maxval(abs(dpsidx)).lt.1.0e-33_rkind) then
+        dpsidx = rho_sep**2*B0*xn/qmag
+      endif
 	
 	Zeff = Za**2*Na/(Ne)
 	do i = 1,nions
@@ -332,24 +340,17 @@ module facit_mod
         enddo
 
 
-        if (pol_asym) then
+ !       if (pol_asym) then
+   	if (pol_asym .and. (.not. pol_asym_in)) then
 
           ! Poloidally asymmetric case
-
-
-          do i = 1, nx
-            PhiV(i,:) = AsymPhi(i,1)*cos(theta) + AsymPhi(i,2)*sin(theta)
-            do j = 1,nions
-              NV(i,:,j) = 1. + AsymN(i,j,1)*cos(theta) + AsymN(i,j,2)*sin(theta)
-            enddo
-          enddo
 
           call asymmetry_fg(nx, nth,nions, theta, BV, RV, jacob, FV, dpsidx, Machi, L11impi, &
                             R0, Ai, Aa, Zi, Za, B2avg, UU, GG, PhiV, NV, Te, Ti, regulopt, &
                             dmin, dmaj, nn)  
 
 
-        else
+        else if (.not. pol_asym_in) then ! (skip if provided in input)
 
           ! Poloidally symmetric case
 
@@ -382,9 +383,21 @@ module facit_mod
         B2avg = B0**2*(1.0 + 0.5*epsk**2)
 
 
-        if (pol_asym) then
+   	if (pol_asym .and. (.not. pol_asym_in)) then
 
-          !asymmetries of ES potential and main ion density
+      !asymmetries of ES potential and main ion density
+      ith1 = minloc(abs(theta),1)
+      ith2 = minloc(abs(theta-pi),1)
+      ith3 = minloc(abs(theta+0.5*pi),1)
+      ith4 = minloc(abs(theta-0.5*pi),1)
+      do i = 1, nx
+        AsymPhi(i,1) = 0.5*(PhiV(i,ith1) - PhiV(i,ith2))
+        AsymPhi(i,2) = 0.5*(PhiV(i,ith3) - PhiV(i,ith4))
+        do ik = 1, nions
+        	AsymN(i,1,ik) = 0.5*(NV(i,ith1,ik) - NV(i,ith2,ik))
+          	AsymN(i,2,ik) = 0.5*(NV(i,ith3,ik) - NV(i,ith4,ik))
+       enddo
+      enddo
           
           dminphia = Za*(Te/Ti)*AsymPhi(:,1)
           dmajphia = Za*(Te/Ti)*AsymPhi(:,2)
@@ -399,7 +412,7 @@ module facit_mod
           enddo
 
 
-        else
+        else if (.not. pol_asym_in) 
 
           ! Poloidally symmetric case
 
@@ -428,7 +441,7 @@ module facit_mod
 
       else
 
-        if (pol_asym) then
+    	if (pol_asym .and. (.not. pol_asym_in)) then
 
           dminphia = Za*(Te/Ti)*AsymPhi(:,1)
           dmajphia = Za*(Te/Ti)*AsymPhi(:,2)
@@ -441,7 +454,7 @@ module facit_mod
             nn(i,:) = 1.0 + dmin(i)*cos(theta) + dmaj(i)*sin(theta)
           enddo
 
-        else
+        else if (.not. pol_asym_in) 
 
           dminphia = 0.0_rkind
           dmajphia = 0.0_rkind
@@ -476,19 +489,20 @@ module facit_mod
 
       ! Pfirsch-Schlüter flux
 
-      !Da_PS   = adps*ma*L11impi*FV**2*q_e*Ti*Cgeo_G*amin**2/(Za**2*q_e**2*B2avg*(dpsidx**2 + 1.e-33))
+      !Da_PS   = adps*ma*L11impi*FV**2*q_e*Ti*Cgeo_G*rho_sep**2/(Za**2*q_e**2*B2avg*(dpsidx**2 + 1.e-33))
       Da_PS=0.0_rkind
       Ka_PS=0.0_rkind
       Ha_PS=0.0_rkind
       Va_PS=0.0_rkind
       Vra_PS=0.0_rkind
       do j=1,nions
-        Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j) *(Cgeo_G/(2.0*eps2))
-        !Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
+!        Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j) *(Cgeo_G/(2.0*eps2))
+!        Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
+        Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j) *eps2/(rho_sep*xn)**2*(FV**2/(B2avg))*(Cgeo_G/(2.0*eps2))
         Ka_PS_M(:,j)   = (Za/Zi(:,j))*Da_PS_M(:,j)
         Ha_PS_M(:,j)   = -((1.0 + (Za/Zi(:,j))*(C0a(:,j) - 1.0)) + (Cgeo_U(:,j)/Cgeo_G)*(Za/Zi(:,j))*(C0a(:,j) + ki(:,j)))*Da_PS_M(:,j)
-        Vra_PS_M(:,j)  = -Da_PS_M(:,j)*grad_ln_na + Ka_PS_M(:,j)*grad_ln_ni(:,j)/amin + Ha_PS_M(:,j)*grad_ln_Ti/amin 
-        Va_PS_M(:,j)  = Ka_PS_M(:,j)*grad_ln_ni(:,j)/amin + Ha_PS_M(:,j)*grad_ln_Ti/amin
+        Vra_PS_M(:,j)  = -Da_PS_M(:,j)*grad_ln_na + Ka_PS_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_PS_M(:,j)*grad_ln_Ti/rho_sep 
+        Va_PS_M(:,j)  = Ka_PS_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_PS_M(:,j)*grad_ln_Ti/rho_sep
         Da_PS = Da_PS + Da_PS_M(:,j)
         Ka_PS = Ka_PS + Ka_PS_M(:,j)
         Ha_PS = Ha_PS + Ha_PS_M(:,j)
@@ -507,8 +521,8 @@ module facit_mod
         Da_CL_M(:,j)   = (2.0*eps2*Cgeo_Gcl/Cgeo_G)*Da_PS_M(:,j)/(2*qmag**2)
         Ka_CL_M(:,j)   = (Za/Zi(:,j))*Da_CL_M(:,j)
         Ha_CL_M(:,j)   = -(1.0 + (Za/Zi(:,j))*(C0a(:,j) - 1.0))*Da_CL_M(:,j)
-        Vra_CL_M(:,j)  = -Da_CL_M(:,j)*grad_ln_na + Ka_CL_M(:,j)*grad_ln_ni(:,j)/amin + Ha_CL_M(:,j)*grad_ln_Ti/amin
-        Va_CL_M(:,j) = Ka_CL_M(:,j)*grad_ln_ni(:,j)/amin + Ha_CL_M(:,j)*grad_ln_Ti/amin
+        Vra_CL_M(:,j)  = -Da_CL_M(:,j)*grad_ln_na + Ka_CL_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_CL_M(:,j)*grad_ln_Ti/rho_sep
+        Va_CL_M(:,j) = Ka_CL_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_CL_M(:,j)*grad_ln_Ti/rho_sep
         Da_CL = Da_CL + Da_CL_M(:,j)
         Ka_CL = Ka_CL + Ka_CL_M(:,j)
         Ha_CL = Ha_CL + Ha_CL_M(:,j)
@@ -530,8 +544,8 @@ module facit_mod
         Da_BP_M(:,j) = 1.5*q_e*Ti*(1.0/(1.0/K11a(:,j) + 1.0/K11i(:,j)))/(Za**2*q_e**2*FV**2*Na)
         Ka_BP_M(:,j) = (Za/Zi(:,j))*Da_BP_M(:,j)
         Ha_BP_M(:,j) = ((Za/Zi(:,j))*(K12i(:,j)/K11i(:,j) - 1.5) - (K12a(:,j)/K11a(:,j) - 1.5))*Da_BP_M(:,j)
-        Vra_BP_M(:,j) = -Da_BP_M(:,j)*grad_ln_na + Ka_BP_M(:,j)*grad_ln_ni(:,j)/amin + Ha_BP_M(:,j)*grad_ln_Ti/amin
-        Va_BP_M(:,j) = Ka_BP_M(:,j)*grad_ln_ni(:,j)/amin + Ha_BP_M(:,j)*grad_ln_Ti/amin
+        Vra_BP_M(:,j) = -Da_BP_M(:,j)*grad_ln_na + Ka_BP_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_BP_M(:,j)*grad_ln_Ti/rho_sep
+        Va_BP_M(:,j) = Ka_BP_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_BP_M(:,j)*grad_ln_Ti/rho_sep
         Da_BP = Da_BP + Da_BP_M(:,j)
         Ka_BP = Ka_BP + Ka_BP_M(:,j)
         Ha_BP = Ha_BP + Ha_BP_M(:,j)
@@ -553,7 +567,7 @@ module facit_mod
       ! total convective velocity
       Vconv =0.0_rkind
       do j = 1,nions
-        Vconv_M(:,j) = Ka_M(:,j)*grad_ln_ni(:,j)/amin + Ha_M(:,j)*grad_ln_Ti/amin !check 
+        Vconv_M(:,j) = Ka_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_M(:,j)*grad_ln_Ti/rho_sep !check 
         Vconv = Vconv+ Vconv_M(:,j)
 
       ! Total surface-averaged flux
