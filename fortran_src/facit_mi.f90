@@ -72,7 +72,7 @@ module facit_mod
     ! RV --------> major radius [m] {arr, (nx,nth)}
     ! jacob -----> Jacobian of the coordinate system [m/T] {arr, (nx,nth)}
     ! PhiV ---> poloidal asymmetry of electrostatic potential [-] {arr, (nx,nth)}
-    ! NV -----> poloidal asymmetry of main ion density [-] {arr, (nx,nth)}
+    ! NV -----> poloidal asymmetry of main ion density [-] {arr, (nx,nth,nions)}
     ! pol_asym --> poloidally symmetric (False) or asymmetric (True) system {boolean}
     ! pol_asym_in --> use poloidally symmetric given as input {boolean}
     ! full_geom -> analytical (False) or iterative (True) geometry {boolean}
@@ -188,7 +188,7 @@ module facit_mod
 	
 	Zeff = Za**2*Na/(Ne)
 	do i = 1,nions
-      Zeff = Zeff +  Zi(:,i)**2 *Ni(:,i)/(Ne)
+             Zeff = Zeff +  Zi(:,i)**2 *Ni(:,i)/(Ne)
 	enddo
 
       do i = 1, nx 
