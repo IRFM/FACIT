@@ -220,32 +220,6 @@ module facit_mod
 
 	deltaM = 2*(ma/meff)*Machi**2*epsk
 
-      !not done
-
-      ! Coulomb Logarithms (from NRL formulary)
-      ! LneeNRL = 23.5 - 0.5*log(Ne/1e6) + 1.25*log(Te) - sqrt(1e-5 + (1.0/16.0)*(log(Te) - 2)**2)
-
-    !  do p = 1, nx
-    !    do j = 1, nions
-    !      if ((Ti(p)*me/(mi(j))<Te(p)).and.(Te(p)<10*Zi(p,j)**2)) then
-    !        LneiNRL(p,j) = 23 - 0.5*log(Zi(p,j)**2*Ne(p)/1e6) + 1.5*log(Te(p))
-    !      elseif ((Ti(p)*me/(mi(j))<10*Zi(p,j)**2).and.(Te(p)>10*Zi(p,j)**2)) then
-    !        LneiNRL(p,j) = 24 - 0.5*log(Ne(p)/1e6) + log(Te(p))
-    !      else
-    !        LneiNRL(p,j) = 30 - log(Zi(p,j)**2/Ai(j)*(Ni(p,j)/1e6)**0.5) + 1.5*log(Ti(p))
-    !      endif
-    !    enddo 
-
-    !    if ((Ti(p)*me/(Aa*mp)<Te(p)).and.(Te(p)<10*Za(p)**2)) then
-    !      LneimpNRL(p) = 23. - log(Za(p)*(Ne(p)/1e6)**0.5) + 1.5*log(Te(p))
-    !    elseif ((Ti(p)*me/(Aa*mp)<10.*Za(p)**2).and.(Te(p)>10.*Za(p)**2)) then
-    !      LneimpNRL(p) = 24. - 0.5*log(Ne(p)/1e6) + log(Te(p))
-    !    else
-    !      LneimpNRL(p) = 30. - log(Za(p)**2/Aa*(Na(p)/1e6)**0.5) + 1.5*log(Ti(p))
-    !    endif
-
-    !  enddo
-
       do j = 1,nions
         LniiNRL(:,j)     = 23. - log(Zi(:,j)*Zi(:,j)*sqrt(2*(Ni(:,j)/1e6)*Zi(:,j)**2)) + 1.5*log(Ti)
         LniimpNRL(:,j)   = 23. - log(Zi(:,j)*Za*sqrt((Ni(:,j)/1e6)*Zi(:,j)**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
@@ -257,19 +231,11 @@ module facit_mod
       Ti15 = Ti**1.5
       Te15 = Te**1.5
 
-      ! Tauee     = (eps_pi_fac*sqrt(me)*Te15)/(Ne*LneeNRL)
-      ! do j=1,nions
-      !  Tauei(:,j)     = (eps_pi_fac*sqrt(me)*Te15)/(Zi(:,j)**2*Ni(:,j)*LneiNRL(:,j))
-      ! enddo
-      ! Taueimp   = (eps_pi_fac*sqrt(me)*Te15)/(Za**2*Na*LneimpNRL)
-
       do j =1,nions
-    !    Tauie(:,j)     = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(:,j)**2*Ne*LneiNRL(:,j))
         Tauii(:,j)     = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(:,j)**4*Ni(:,j)*LniiNRL(:,j))
         Tauiimp(:,j)   = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(:,j)**2*Za**2*Na*LniimpNRL(:,j))
       enddo
 
-    !  Tauimpe   = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**2*Ne*LneimpNRL)
       do j =1, nions
         Tauimpi(:,j)   = (eps_pi_fac*sqrt(ma)*Ti15)/(Zi(:,j)**2*Za**2*Ni(:,j)*LniimpNRL(:,j))
       enddo
@@ -282,14 +248,12 @@ module facit_mod
       enddo
 
       ! transit frequencies
-      !wee     = (2.0*q_e*Te/me)**0.5/(R0*qmag)
       do j = 1,nions
         wii(:,j)  = (2.0*q_e*Ti/mi(j))**0.5/(R0*qmag)
       enddo
       wimpimp = (2.0*q_e*Ti/ma)**0.5/(R0*qmag)
 
       ! collisionalities
-      !nuestar   = 1.0/((eps15 + 1.e-33)*wee*Tauee)
       do j = 1,nions
         nuistar(:,j)   = 1.0/((eps15 + 1.e-33)*wii(:,j)*Tauii(:,j))
       enddo
