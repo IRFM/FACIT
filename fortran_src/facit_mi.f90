@@ -459,7 +459,7 @@ module facit_mod
 !        Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j) *(Cgeo_G/(2.0*eps2))
 !        Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
 !	Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j) *eps2/(rho_sep*xn)**2*(FV**2/(B2avg))*(Cgeo_G/(2.0*eps2))
-		Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j)/(rho_sep*xn)**2*(FV**2/(B2avg))*(Cgeo_G/2.0)
+		Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j)*(FV/(rho_sep*xn))**2/B2avg*Cgeo_G/2.0
 		Ka_PS_M(:,j)   = (Za/Zi(:,j))*Da_PS_M(:,j)
 		Ha_PS_M(:,j)   = -((1.0 + (Za/Zi(:,j))*(C0a(:,j) - 1.0)) + (Cgeo_U(:,j)/Cgeo_G)*(Za/Zi(:,j))*(C0a(:,j) + ki(:,j)))*Da_PS_M(:,j)
 		Vra_PS_M(:,j)  = -Da_PS_M(:,j)*grad_ln_na + Ka_PS_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_PS_M(:,j)*grad_ln_Ti/rho_sep 
