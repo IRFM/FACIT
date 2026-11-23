@@ -19,7 +19,7 @@ module facit_mod
                     gradTi, gradNi, gradNa, &                            ! gradients
                     invaspct, B0, R0, qmag, dpsidx, FV, BV, RV, jacob, & ! equilibrium
                     PhiV, NV, &                                    ! input asymmetries
-                    pol_asym, pol_asym_in, full_geom,solution, rotation, regulopt, &           ! different options in the model
+                    pol_asym, pol_asym_in, full_geom, rotation, regulopt, &           ! different options in the model
                     Flux_imp, Da, Da_M, Vconv,Vconv_M, nn, dmin, dmaj, & 
                     Da_PS_M, Da_BP_M, Da_CL_M, Ka_PS_M, Ka_BP_M, Ka_CL_M, &          ! supplementary outputs: PS, BP, CL & centrifugal components
                     Ha_PS_M, Ha_BP_M, Ha_CL_M,Va_PS_M,Va_BP_M,Va_CL_M,Tauii, &              ! main outputs: flux, transport coefficients and poloidal asymmetry
@@ -76,7 +76,7 @@ module facit_mod
     ! pol_asym --> poloidally symmetric (False) or asymmetric (True) system {boolean}
     ! pol_asym_in --> use poloidally symmetric given as input {boolean}
     ! full_geom -> analytical (False) or iterative (True) geometry {boolean}
-    ! solution ---> 
+    ! solution ---> 2 ways of solving the analytical case
     ! rotation --> consider toroidal rotation {boolean}
     ! regulopt --> options for iterative calculations [-] {arr, 4}
     !*******************************************************************************
@@ -111,7 +111,6 @@ module facit_mod
       real(rkind), dimension(nx,nth), intent(in) :: PhiV
        real(rkind), dimension(4), intent(in) :: regulopt
       logical, intent(in) :: pol_asym, pol_asym_in, full_geom, rotation
-      integer, intent(in):: solution
       real(rkind), dimension(nx), intent(inout)  :: dpsidx
       real(rkind), dimension(nx,nth,nions), intent(inout) :: NV
 
@@ -125,6 +124,7 @@ module facit_mod
 
       ! OTHER
       integer :: i,j, p, n, it, ix, ik, ith1, ith2, ith3, ith4 !, info, ierr, ierrmax
+      integer :: solution
       real(rkind) :: rho_sep, ma, ftrap, ki_Redl, C2
       real(rkind), dimension(nx,2) :: AsymPhi
       real(rkind), dimension(nx, nions, 2) :: AsymN
@@ -166,21 +166,23 @@ module facit_mod
       !(previous two lines here because "A specification statement cannot appear in the executable section")
 
       !---------------------------------------------------------------------------
+	
+	solution = 2
+	
+	mi = Ai*mp ! main ion mass
+	ma = Aa*mp ! impurity mass
 
-      mi = Ai*mp ! main ion mass
-      ma = Aa*mp ! impurity mass
+	if (maxval(RV(:,1)).lt.1.0e-33_rkind) then
+		epsk  = xn*invaspct ! local inverse aspect ratio
+	else
+		do i = 1, nx 
+			epsk(i) = (maxval(RV(i,:)) - minval(RV(i,:)))/(maxval(RV(i,:)) + minval(RV(i,:)))
+		enddo
+	endif
+	eps15 = (epsk + 1.0e-33)**1.5
+	eps2  = (epsk + 1.0e-33)**2
 
-      if (maxval(RV(:,1)).lt.1.0e-33_rkind) then
-      	 epsk  = xn*invaspct ! local inverse aspect ratio
-      else
-         do i = 1, nx 
-            epsk(i) = (maxval(RV(i,:)) - minval(RV(i,:)))/(maxval(RV(i,:)) + minval(RV(i,:)))
-         enddo
-      endif
-      eps15 = (epsk + 1.0e-33)**1.5
-      eps2  = (epsk + 1.0e-33)**2
-
-      rho_sep  = invaspct*R0 	! rho_tor at separatrix
+	rho_sep  = invaspct*R0 	! rho_tor at separatrix
 
       if (maxval(abs(dpsidx)).lt.1.0e-33_rkind) then
         dpsidx = rho_sep**2*B0*xn/qmag
@@ -202,29 +204,26 @@ module facit_mod
         enddo  
       enddo
 
-
-  !    if (.not.rotation) then
-  !      Machi = 0.0_rkind  
-  !    endif
-
-	
-      deltaM = 0.0_rkind
+        deltaM = 0.0_rkind
 	Nss = 0.0_rkind
-      meff = 0.0_rkind
-      do j = 1, nions
-        meff = meff + Ni(:,j)*Ai(j) *mp 
-	  Nss =  Nss + Ni(:,j)
-      enddo
+	meff = 0.0_rkind
+	do j = 1, nions
+		meff = meff + Ni(:,j)*Ai(j) *mp 
+		Nss =  Nss + Ni(:,j)
+	enddo
 
 	meff = meff/Nss
 
 	deltaM = 2*(ma/meff)*Machi**2*epsk
-
-      do j = 1,nions
-        LniiNRL(:,j)     = 23. - log(Zi(:,j)*Zi(:,j)*sqrt(2*(Ni(:,j)/1e6)*Zi(:,j)**2)) + 1.5*log(Ti)
-        LniimpNRL(:,j)   = 23. - log(Zi(:,j)*Za*sqrt((Ni(:,j)/1e6)*Zi(:,j)**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
-      enddo 
-      LnimpimpNRL = 23. - log(Za*Za*sqrt((Na/1e6)*Za**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
+	if (.not.rotation) then
+		deltaM = 0.0_rkind  
+	endif
+     
+	do j = 1,nions
+		LniiNRL(:,j)     = 23. - log(Zi(:,j)*Zi(:,j)*sqrt(2*(Ni(:,j)/1e6)*Zi(:,j)**2)) + 1.5*log(Ti)
+		LniimpNRL(:,j)   = 23. - log(Zi(:,j)*Za*sqrt((Ni(:,j)/1e6)*Zi(:,j)**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
+	enddo 
+	LnimpimpNRL = 23. - log(Za*Za*sqrt((Na/1e6)*Za**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
 
 
       ! Collision times (Braginskii)
@@ -259,11 +258,11 @@ module facit_mod
       enddo
       nuimpstar = 1.0/((eps15 + 1.e-33)*wimpimp*Tauimpimp)
 
-      wca    = q_e*Za*B0/ma ! impurity cyclotron frequency
+	wca    = q_e*Za*B0/ma ! impurity cyclotron frequency
 
-      do j=1, nions
-        nuswca(:,j) = L11impi(:,j)/wca ! ratio of impurity collision frequency to cyclotron frequency
-      enddo
+	do j=1, nions
+		nuswca(:,j) = L11impi(:,j)/wca ! ratio of impurity collision frequency to cyclotron frequency
+	enddo
 
       ! fitted factors
       call facs(nx, Za, ft, f1, f2, f3, y1, y2, y3, y4, adps)
@@ -278,7 +277,7 @@ module facit_mod
         do j=1, nions
           C0a(i,j)= (1.5/(1.0 + (Ai(j)/Aa)*f1(i)) - (0.29 + 0.68*alpha(i,j))/(0.59 + alpha(i,j) + (1.34 + f2(i))/g(i,j)**2))/(1 + f3(i)*mu_ie(i,j)*g(i,j)**2)
           ki(i,j) = ((alpha0(i) + 0.7*Zeff(i)*SQRT(ft(i)*nuistar(i,j)))/(1.0 + 0.18*SQRT(nuistar(i,j)))- 0.002*nuistar(i,j)**2*ft(i)**6)/(1.0 + 0.004*nuistar(i,j)**2*ft(i)**6)
-        enddo
+       enddo
       enddo
 
       rhoLimp2 = (2.0*q_e*Ti/ma)/wca**2 ! Impurity Larmor radius (squared)
@@ -287,22 +286,22 @@ module facit_mod
       do j =1, nions
         UU(:,j)  = -(Za/Zi(:,j))*(C0a(:,j) + ki(:,j))*grad_ln_Ti
         GG(:,j)  = grad_ln_na - (Za/Zi(:,j))*grad_ln_ni(:,j) + (1 + (Za/Zi(:,j))*(C0a(:,j) - 1))*grad_ln_Ti
-      enddo
+       enddo
 
 
       !---------------------------------------------------------------------------
       !-----------------------  Poloidal asymmetry  ------------------------------
       !---------------------------------------------------------------------------
 
-      if (solution == 1) then
+	if (full_geom) then
 
         ! Full geometry calculation
 
-        call fluxavg(nx, nth, theta, BV**2, jacob, B2avg)
+	call fluxavg(nx, nth, theta, BV**2, jacob, B2avg)
 
-        do ix = 1, nx
-          b2(ix,:) = BV(ix,:)**2/B2avg(ix)
-        enddo
+	do ix = 1, nx
+		b2(ix,:) = BV(ix,:)**2/B2avg(ix)
+	enddo
 
 
  !       if (pol_asym) then
@@ -310,12 +309,12 @@ module facit_mod
 
           ! Poloidally asymmetric case
 
-          call asymmetry_fg(nx, nth,nions, theta, BV, RV, jacob, FV, dpsidx, Machi, L11impi, &
+		call asymmetry_fg(nx, nth,nions, theta, BV, RV, jacob, FV, dpsidx, Machi, L11impi, &
                             R0, Ai, Aa, Zi, Za, B2avg, UU, GG, PhiV, NV, Te, Ti, regulopt, &
                             dmin, dmaj, nn)  
 
 
-        else if (.not. pol_asym_in) then ! (skip if provided in input)
+	else if (.not. pol_asym_in) then ! (skip if provided in input)
 
           ! Poloidally symmetric case
 
@@ -324,20 +323,19 @@ module facit_mod
           nn   = 1.0_rkind
           NV   = 1.0_rkind
 
-        endif
+	endif
 
 
         call fluxavg(nx, nth, theta, b2/nn, jacob, b2navg)
         call fluxavg(nx, nth, theta, nn/b2, jacob, nb2avg)
 
-
         ! geometric coefficients in the equation for the flux
         Cgeo_G = nb2avg - 1._rkind/b2navg
         do j= 1, nions
-          call fluxavg(nx, nth, theta, nn/NV(:,:,j), jacob, nNVavg)
-          call fluxavg(nx, nth, theta, b2/NV(:,:,j), jacob, b2NVavg)
-          Cgeo_U(:,j) = b2NVavg/b2navg - nNVavg
-        enddo
+		call fluxavg(nx, nth, theta, nn/NV(:,:,j), jacob, nNVavg)
+		call fluxavg(nx, nth, theta, b2/NV(:,:,j), jacob, b2NVavg)
+		Cgeo_U(:,j) = b2NVavg/b2navg - nNVavg
+	enddo
 
         Cgeo_Gcl = nb2avg
 
@@ -359,8 +357,8 @@ module facit_mod
         AsymPhi(i,1) = 0.5*(PhiV(i,ith1) - PhiV(i,ith2))
         AsymPhi(i,2) = 0.5*(PhiV(i,ith3) - PhiV(i,ith4))
         do ik = 1, nions
-        	AsymN(i,1,ik) = 0.5*(NV(i,ith1,ik) - NV(i,ith2,ik))
-          	AsymN(i,2,ik) = 0.5*(NV(i,ith3,ik) - NV(i,ith4,ik))
+        	AsymN(i,ik,1) = 0.5*(NV(i,ith1,ik) - NV(i,ith2,ik))
+          	AsymN(i,ik,2) = 0.5*(NV(i,ith3,ik) - NV(i,ith4,ik))
        enddo
       enddo
           
@@ -395,7 +393,7 @@ module facit_mod
 
         dD2 = 0.5*(dmin**2 + dmaj**2)
 
-        ! geometric coefficients in the equation for the flux
+       ! geometric coefficients in the equation for the flux
 
         Cgeo_G = 2.0*epsk*dmin + 2.0*eps2 + dD2
         do j = 1,nions
@@ -463,7 +461,7 @@ module facit_mod
       do j=1,nions
 !        Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j) *(Cgeo_G/(2.0*eps2))
 !        Da_PS   = qmag**2*rhoLimp2*adps*L11impi*FV**2/(R0**2*B2avg)*(Cgeo_G/(2.0*eps2))
-        Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j) *eps2/(rho_sep*xn)**2*(FV**2/(B2avg))*(Cgeo_G/(2.0*eps2))
+	Da_PS_M(:,j)   = adps*qmag**2*rhoLimp2*L11impi(:,j) *eps2/(rho_sep*xn)**2*(FV**2/(B2avg))*(Cgeo_G/(2.0*eps2))
         Ka_PS_M(:,j)   = (Za/Zi(:,j))*Da_PS_M(:,j)
         Ha_PS_M(:,j)   = -((1.0 + (Za/Zi(:,j))*(C0a(:,j) - 1.0)) + (Cgeo_U(:,j)/Cgeo_G)*(Za/Zi(:,j))*(C0a(:,j) + ki(:,j)))*Da_PS_M(:,j)
         Vra_PS_M(:,j)  = -Da_PS_M(:,j)*grad_ln_na + Ka_PS_M(:,j)*grad_ln_ni(:,j)/rho_sep + Ha_PS_M(:,j)*grad_ln_Ti/rho_sep 
@@ -573,7 +571,7 @@ module facit_mod
       use constants, only: rkind
       implicit none
 
-      real(rkind), dimension(nx,nth), intent(in)  :: AF, JJ
+      real(rkind), dimension(nx,nth), intent(in)  :: AF(:,:), JJ(:,:)
       real(rkind), dimension(nth), intent(in) :: thetay
       real(rkind), dimension(nx), intent(out) :: Aavg
       real(rkind) :: denom
@@ -598,14 +596,10 @@ module facit_mod
         else
           Aavg(ix) = Aavg(ix)/denom
         endif
-
       enddo
 
       return
     end subroutine fluxavg 
-
-
-
 
     subroutine fluxavgscal(nth,thetay,AF,JJ,Aavg) !check
 
@@ -629,32 +623,29 @@ module facit_mod
       implicit none
       integer, intent(in)  :: nth 
       integer :: ith
-      real(rkind), dimension(nth), intent(in)  :: AF, JJ
+      real(rkind), dimension(nth), intent(in)  :: AF(:), JJ(:)
       real(rkind), dimension(nth), intent(in)  :: thetay
       real(rkind), intent(out) :: Aavg
       real(rkind) :: denom
 
-      Aavg = 0._rkind
-      denom = 0._rkind
+	Aavg = 0._rkind
+	denom = 0._rkind
 
-      do ith=2,nth
-        denom = denom + 0.5*(thetay(ith)-thetay(ith-1))*(JJ(ith) + JJ(ith-1))
-      enddo
+	do ith=2,nth
+		denom = denom + 0.5*(thetay(ith)-thetay(ith-1))*(JJ(ith) + JJ(ith-1))
+	enddo
 
-      do ith=2,nth
-        Aavg = Aavg+ 0.5*(thetay(ith)-thetay(ith-1))*(AF(ith)*JJ(ith) + AF(ith-1)*JJ(ith-1))
-      enddo
+	do ith=2,nth
+		Aavg = Aavg+ 0.5*(thetay(ith)-thetay(ith-1))*(AF(ith)*JJ(ith) + AF(ith-1)*JJ(ith-1))
+	enddo
+	if (abs(denom).gt.0.) then
+		Aavg = Aavg/denom
+	else
+		Aavg = sum(AF)/nth
+ 	endif
 
-      if (abs(denom).gt.0.) then
-        Aavg = Aavg/denom
-      else
-        Aavg = sum(AF)/nth
-      endif
-
-      return
+	return
     end subroutine fluxavgscal
-
-
 
 
 subroutine asymmetry_an(nx, xn,nions, UU, GG, epsk, invaspct, qmag, nuswca, deltaM, Ai, Aa, Za, &
