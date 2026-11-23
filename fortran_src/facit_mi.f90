@@ -167,7 +167,7 @@ module facit_mod
 
       !---------------------------------------------------------------------------
 	
-	solution = 2
+	solution = 2	! Two ways for the analytical computation, solution = 2 and 3. Tested equivalent.
 	
 	mi = Ai*mp ! main ion mass
 	ma = Aa*mp ! impurity mass
@@ -184,25 +184,25 @@ module facit_mod
 
 	rho_sep  = invaspct*R0 	! rho_tor at separatrix
 
-      if (maxval(abs(dpsidx)).lt.1.0e-33_rkind) then
-        dpsidx = rho_sep**2*B0*xn/qmag
-      endif
+	if (maxval(abs(dpsidx)).lt.1.0e-33_rkind) then
+		dpsidx = rho_sep**2*B0*xn/qmag
+	endif
 	
 	Zeff = Za**2*Na/(Ne)
 	do i = 1,nions
              Zeff = Zeff +  Zi(:,i)**2 *Ni(:,i)/(Ne)
 	enddo
 
-      do i = 1, nx 
-        grad_ln_na(i) = gradNa(i)/(Na(i) + 1.e-33)
-        grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33)
+	do i = 1, nx 
+		grad_ln_na(i) = gradNa(i)/(Na(i) + 1.e-33)
+		grad_ln_Ti(i) = gradTi(i)/(Ti(i) + 1.e-33)
         ! trapped particle fraction
-        ft(i) = 1. - (1. - epsk(i))**2/(sqrt(1. - epsk(i)**2)*(1+1.46*sqrt(epsk(i))))
-        do j = 1, nions
+  		ft(i) = 1. - (1. - epsk(i))**2/(sqrt(1. - epsk(i)**2)*(1+1.46*sqrt(epsk(i))))
+		do j = 1, nions
         ! logarithmic gradients
-          grad_ln_ni(i,j) = gradNi(i,j)/(Ni(i,j) + 1.e-33)
-        enddo  
-      enddo
+			grad_ln_ni(i,j) = gradNi(i,j)/(Ni(i,j) + 1.e-33)
+		enddo  
+	enddo
 
         deltaM = 0.0_rkind
 	Nss = 0.0_rkind
@@ -225,38 +225,37 @@ module facit_mod
 	enddo 
 	LnimpimpNRL = 23. - log(Za*Za*sqrt((Na/1e6)*Za**2+(Na/1e6)*Za**2)) + 1.5*log(Ti)
 
-
       ! Collision times (Braginskii)
-      Ti15 = Ti**1.5
-      Te15 = Te**1.5
+	Ti15 = Ti**1.5
+	Te15 = Te**1.5
 
-      do j =1,nions
-        Tauii(:,j)     = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(:,j)**4*Ni(:,j)*LniiNRL(:,j))
-        Tauiimp(:,j)   = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(:,j)**2*Za**2*Na*LniimpNRL(:,j))
-      enddo
+	do j =1,nions
+		Tauii(:,j)     = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(:,j)**4*Ni(:,j)*LniiNRL(:,j))
+		Tauiimp(:,j)   = (eps_pi_fac*sqrt(mi(j))*Ti15)/(Zi(:,j)**2*Za**2*Na*LniimpNRL(:,j))
+	enddo
 
-      do j =1, nions
-        Tauimpi(:,j)   = (eps_pi_fac*sqrt(ma)*Ti15)/(Zi(:,j)**2*Za**2*Ni(:,j)*LniimpNRL(:,j))
-      enddo
-      Tauimpimp = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**4*Na*LnimpimpNRL)
+	do j =1, nions
+		Tauimpi(:,j)   = (eps_pi_fac*sqrt(ma)*Ti15)/(Zi(:,j)**2*Za**2*Ni(:,j)*LniimpNRL(:,j))
+	enddo
+	Tauimpimp = (eps_pi_fac*sqrt(ma)*Ti15)/(Za**4*Na*LnimpimpNRL)
 
 
       ! impurity collision frequency
-      do j = 1,nions
-        L11impi(:,j) = 1.0/(sqrt(1.0 + Aa/Ai(j))*Tauimpi(:,j))
-      enddo
+	do j = 1,nions
+		L11impi(:,j) = 1.0/(sqrt(1.0 + Aa/Ai(j))*Tauimpi(:,j))
+	enddo
 
       ! transit frequencies
-      do j = 1,nions
-        wii(:,j)  = (2.0*q_e*Ti/mi(j))**0.5/(R0*qmag)
-      enddo
-      wimpimp = (2.0*q_e*Ti/ma)**0.5/(R0*qmag)
+	do j = 1,nions
+		wii(:,j)  = (2.0*q_e*Ti/mi(j))**0.5/(R0*qmag)
+	enddo
+	wimpimp = (2.0*q_e*Ti/ma)**0.5/(R0*qmag)
 
       ! collisionalities
-      do j = 1,nions
-        nuistar(:,j)   = 1.0/((eps15 + 1.e-33)*wii(:,j)*Tauii(:,j))
-      enddo
-      nuimpstar = 1.0/((eps15 + 1.e-33)*wimpimp*Tauimpimp)
+	do j = 1,nions
+		nuistar(:,j)   = 1.0/((eps15 + 1.e-33)*wii(:,j)*Tauii(:,j))
+	enddo
+ 	nuimpstar = 1.0/((eps15 + 1.e-33)*wimpimp*Tauimpimp)
 
 	wca    = q_e*Za*B0/ma ! impurity cyclotron frequency
 
@@ -265,28 +264,28 @@ module facit_mod
 	enddo
 
       ! fitted factors
-      call facs(nx, Za, ft, f1, f2, f3, y1, y2, y3, y4, adps)
-      do j = 1, nions
-        g(:,j) = nuistar(:,j)*eps15 ! collisionality parameter
-        mu_ie(:,j) = (96.0*sqrt2/125.0)*(1/Zi(:,j)**2)*sqrt(me/mi(j))*(Ti15/Te15) ! ion-electron heat exchange term (Fülöp-Helander PoP '01)
-        alpha(:,j) = Na*Za**2/(Ni(:,j)*Zi(:,j)**2) ! impurity strength parameter
-      enddo
+	call facs(nx, Za, ft, f1, f2, f3, y1, y2, y3, y4, adps)
+	do j = 1, nions
+		g(:,j) = nuistar(:,j)*eps15 ! collisionality parameter
+		mu_ie(:,j) = (96.0*sqrt2/125.0)*(1/Zi(:,j)**2)*sqrt(me/mi(j))*(Ti15/Te15) ! ion-electron heat exchange term (Fülöp-Helander PoP '01)
+		alpha(:,j) = Na*Za**2/(Ni(:,j)*Zi(:,j)**2) ! impurity strength parameter
+	enddo
 
-      do i = 1, nx !check
-        alpha0(i) = -(0.62 + 0.055*(Zeff(i) - 1.0))*(1.0 - ft(i))/((0.53 + 0.17*(Zeff(i) - 1.0))*(1.0 - (0.31 - 0.065*(Zeff(i) - 1.0))*ft(i) - 0.25*ft(i)**2))
-        do j=1, nions
-          C0a(i,j)= (1.5/(1.0 + (Ai(j)/Aa)*f1(i)) - (0.29 + 0.68*alpha(i,j))/(0.59 + alpha(i,j) + (1.34 + f2(i))/g(i,j)**2))/(1 + f3(i)*mu_ie(i,j)*g(i,j)**2)
-          ki(i,j) = ((alpha0(i) + 0.7*Zeff(i)*SQRT(ft(i)*nuistar(i,j)))/(1.0 + 0.18*SQRT(nuistar(i,j)))- 0.002*nuistar(i,j)**2*ft(i)**6)/(1.0 + 0.004*nuistar(i,j)**2*ft(i)**6)
-       enddo
-      enddo
+	do i = 1, nx !check
+		alpha0(i) = -(0.62 + 0.055*(Zeff(i) - 1.0))*(1.0 - ft(i))/((0.53 + 0.17*(Zeff(i) - 1.0))*(1.0 - (0.31 - 0.065*(Zeff(i) - 1.0))*ft(i) - 0.25*ft(i)**2))
+		do j=1, nions
+			C0a(i,j)= (1.5/(1.0 + (Ai(j)/Aa)*f1(i)) - (0.29 + 0.68*alpha(i,j))/(0.59 + alpha(i,j) + (1.34 + f2(i))/g(i,j)**2))/(1 + f3(i)*mu_ie(i,j)*g(i,j)**2)
+			ki(i,j) = ((alpha0(i) + 0.7*Zeff(i)*SQRT(ft(i)*nuistar(i,j)))/(1.0 + 0.18*SQRT(nuistar(i,j)))- 0.002*nuistar(i,j)**2*ft(i)**6)/(1.0 + 0.004*nuistar(i,j)**2*ft(i)**6)
+		enddo
+	enddo
 
-      rhoLimp2 = (2.0*q_e*Ti/ma)/wca**2 ! Impurity Larmor radius (squared)
+	rhoLimp2 = (2.0*q_e*Ti/ma)/wca**2 ! Impurity Larmor radius (squared)
 
       ! thermodynamic gradients (for asymmetry calculations)
-      do j =1, nions
-        UU(:,j)  = -(Za/Zi(:,j))*(C0a(:,j) + ki(:,j))*grad_ln_Ti
-        GG(:,j)  = grad_ln_na - (Za/Zi(:,j))*grad_ln_ni(:,j) + (1 + (Za/Zi(:,j))*(C0a(:,j) - 1))*grad_ln_Ti
-       enddo
+	do j =1, nions
+		UU(:,j)  = -(Za/Zi(:,j))*(C0a(:,j) + ki(:,j))*grad_ln_Ti
+		GG(:,j)  = grad_ln_na - (Za/Zi(:,j))*grad_ln_ni(:,j) + (1 + (Za/Zi(:,j))*(C0a(:,j) - 1))*grad_ln_Ti
+	enddo
 
 
       !---------------------------------------------------------------------------
@@ -304,7 +303,6 @@ module facit_mod
 	enddo
 
 
- !       if (pol_asym) then
    	if (pol_asym .and. (.not. pol_asym_in)) then
 
           ! Poloidally asymmetric case
@@ -344,7 +342,6 @@ module facit_mod
         ! Simplified geometry
 
         B2avg = B0**2*(1.0 + 0.5*epsk**2)
-
 
    	if (pol_asym .and. (.not. pol_asym_in)) then
 
